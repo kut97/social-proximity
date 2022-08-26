@@ -1,5 +1,5 @@
 
-# SocialP roximity
+# Social Proximity
 
 From the traditional setting to the new era of digital social media we have witnessed a significant shift in informal social interactions. Facebook is the
 largest online informal social network globally and it gives an insight into people’s social connections in real life. Facebook scales up to 2.1 billion active users
