@@ -14,7 +14,7 @@ Mathematical Interpretation of Social Proximity:
 
 $$SCI_{i,j}\ =(Facebook\ Connection_{i,j})/(Facebook\ Connection_i\ast Facebook\ Connections_j\)$$
 
-$$Social\ Proximity_i=(∑_j w_{j} *SCI_{i,j} )/(∑_h SCI_{i,h})\ here\ w_{j}\ is\ the\ outcome measure associated\ with\ the\ alter\ location\ j $$
+$$Social\ Proximity_i=(∑_j w_{j} *SCI_{i,j} )/(∑_h SCI_{i,h})\ where\ w_{j}\ is\ the\ outcome\ measure\ associated\ with\ the\ alter\ location\ j $$
 
 
 
