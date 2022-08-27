@@ -12,11 +12,11 @@ Using SCI, Kuchler et al. (2021) created a new metric, called Social Proximity t
 
 Mathematical Interpretation of Social Proximity:
 
-$$SCI_{i,j}\ =(Facebook\ Connection_{i,j})/(Facebook\ Connection_i\ast Facebook\ Connections_j\)$$
+$$SCI_{i,j}\ =(Facebook\ Connection_{i,j})/(Facebook\ Connection_i\ast Facebook\ Connections_j\),$$
 
-$$Social\ Proximity_i=(∑_j w_{j} *SCI_{i,j} )/(∑_h SCI_{i,h})\ where\ w_{j}\ is\ the\ outcome\ measure\ associated\ with\ the\ alter\ location\ j $$
+$$Social\ Proximity_i=(∑_j w_{j} *SCI_{i,j} )/(∑_h SCI_{i,h}),$$
 
-
+where w_{j} is the outcome measure associated with the alter location j. 
 
 Refrences
 1) Vahedi, Behzad, Morteza Karimzadeh, and Hamidreza Zoraghein. "Spatiotemporal prediction of COVID-19 cases using inter-and intra-county proxies of human interactions." Nature communications 12, no. 1 (2021): 1-15.
