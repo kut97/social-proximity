@@ -1,0 +1,47 @@
+---
+title: "healt-determinants-sci"
+author: "Kushagra Tiwari"
+date: "2022-09-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{R}
+library(tidyverse)
+data <-read.csv("Health Rankings PA.csv")
+data  <- data[,-c(5,6,7,8)]
+pa_demographics_data <- read.csv("social_proximity_data.csv")
+pa_demographics_data <- pa_demographics_data[,c(2,4,15)]
+colnames(pa_demographics_data)[1] <- "Fips"
+df_health <- merge(data,pa_demographics_data,by="Fips")
+df_health
+```
+
+````{r}
+##### social connectedness####3
+df_0 <- read_tsv ('county_county.tsv')
+df_0 <- df_0 %>% dplyr::mutate(probabilites=scaled_sci/(1000000000)) 
+df_1 <- df_0 %>% dplyr::filter(user_loc %in% 42001:42133 & fr_loc %in% 42001:42133)
+df_1 <- unique(df_1)
+df_1 <- df_1 %>% distinct(probabilites,.keep_all = TRUE)##single repeted pair wise
+df_1
+#comparisions for sci
+df_sci_3 <- df_1 %>% filter(user_loc==fr_loc)
+df_health$sci <- df_sci_3$probabilites
+```
+
+```{R}
+##### linear model###
+results <- lm(Health.Outcome~sci+income_per_capita+Health.Factor, data=df_health)
+summary(results)
+```
+
+```{r}
+qqnorm(results$residuals)
+qqline(results$residuals)
+plot(density(results$residuals))
+
+``
