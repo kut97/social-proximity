@@ -10,39 +10,39 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-Social Networks can be a significant factor in understanding the dynamics of various aspects of different fields such as social,economical and public health. In order to substanitate the intensity of social network between individuals Bailey et al proposed a relative frequency of Friendship links between different geographical unit called as Social Connectedness Index. Due to the nature of its relative frequency a comparision between the intensity of social ties across different locations can now be possible. Further Kulcher et al proposed another measure understanding the social influence of alters on ego called social proximity. This markdown file is a guide for other researchers who would want to make use of Social Proximity in there research
+Social Networks can be a significant factor in understanding the dynamics of various aspects of different fields such as social,economical and public health. In order to substanitate the intensity of social network between individuals Bailey et al proposed a relative frequency of Friendship links between different geographical unit called as Social Connectedness Index. Due to the nature of its relative frequency a comparision between the intensity of social ties across different locations can now be possible. Further Kulcher et al proposed another measure understanding the social influence of alters on ego called social proximity. This markdown file is a guide for other researchers who would want to make use of Social Proximity in there research.
 
 ```{r}
 library(tidyverse)
 library(igraph)
 ```
 
-We create the social proximity values for each county in Penselvaniya as a first step we want to convert the SCI values into relative probabilities so we divide the SCI by the highest frequency of SCI and create a data frame with user location fr_locations and there probability values.
+We create the social proximity values for each county in Pennsylvanian as a first step we want to convert the SCI values into relative probabilities so we divide the SCI by the highest frequency of SCI and create a data frame with user location fr_locations and their probability values.
 
 ```{r}
 #df_0 <- read_tsv ('county_county.tsv')
 df_0 <- df_0 %>% dplyr::mutate(probabilites=scaled_sci/(1000000000)) 
 df_1 <- df_0 %>% dplyr::filter(user_loc %in% 42001:42133 & fr_loc %in% 42001:42133)
 df_1 <- unique(df_1)
-df_1 <- df_1 %>% distinct(probabilites,.keep_all = TRUE) ##single repeted pair wise comparisions for sci
+df_1 <- df_1 %>% distinct(probabilites,.keep_all = TRUE) ##single repeated pairwise comparisons for sci
 user_loc <- df_1 %>% distinct(user_loc)
 ```
 
-Generating weights for 67 counties and merging it in a dataframe.
+Generating weights for 67 counties and merging it in a data frame.
 ```{r}
 fr_loc <- df_1 %>% distinct(fr_loc)
 wt <- rnorm(67,0.13,1)
 q_i <- data.frame(fr_loc,wt)
 ```
 
-Further to create a weighted probabilities scaled by SCI and the weights of friend location we create a new dataframe and mutate it with weighted SCI. 
+Further to create a weighted probabilities scaled by SCI and the weights of friend location we create a new data frame and mutate it with weighted SCI. 
 ```{r}
 df_s <- merge(df_1,q_i,by="fr_loc")
 df_s <- df_s %>% mutate(wt_sci=probabilites*wt)
 df_s <- df_s[,c(2,1,3,4,5)]
 ```
 
-First create an adjancy matrix between user_loc and friendship_loc with probabilites as there enteries. Further we make all the diagonal matrix 0. 
+First create an adjacency matrix between user_loc and friendship_loc with probabilities as their entries. Further we make all the diagonal matrix 0. 
 
 ```{r}
 dataframe_for_matrix <- df_1 %>% dplyr::select(c(user_loc,fr_loc,probabilites))
