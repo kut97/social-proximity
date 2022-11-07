@@ -1,0 +1,65 @@
+---
+title: "Social Proximity Zipcode"
+author: 
+date: 
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Social Networks can be a significant factor in understanding the dynamics of various aspects of different fields such as social,economical and public health. In order to substanitate the intensity of social network between individuals Bailey et al proposed a relative frequency of Friendship links between different geographical unit called as Social Connectedness Index. Due to the nature of its relative frequency a comparision between the intensity of social ties across different locations can now be possible. Further Kulcher et al proposed another measure understanding the social influence of alters on ego called social proximity. This markdown file is a guide for other researchers who would want to make use of Social Proximity in there research.
+
+```{r}
+library(tidyverse)
+library(igraph)
+```
+
+We create the social proximity values for each zipcode beginning with a 1. We then drop zipcodes that fall outside of Pennsylvania. As a first step we want to convert the SCI values into relative probabilities so we divide the SCI by the highest frequency of SCI and create a data frame with user location fr_locations and their probability values.
+
+```{r}
+df_0 <- read_tsv ('zcta_zcta_shard1.tsv')
+df_0 <- df_0 %>% dplyr::mutate(probabilites=scaled_sci/(1000000000)) 
+df_1 <- df_0 %>% dplyr::filter(user_loc %in% 15001:19612 & fr_loc %in% 15001:19612)
+df_1 <- unique(df_1)
+df_1 <- df_1 %>% distinct(probabilites,.keep_all = TRUE) ##single repeated pairwise comparisons for sci
+user_loc <- df_1 %>% distinct(user_loc)
+```
+
+Add zipcode information
+```{r}
+library(zipcodeR)
+#user_loc
+#distance_list <- c()
+#for (i in 1: length(df_1$user_loc)){
+#   distance_list <-c(distance_list, zip_distance(df_1$user_loc[i], df_1$fr_loc[i][3]))
+#}
+#df_1$distance <- distance_list
+```
+```{r}
+library(zipcodeR)
+df_1 <- df_1 %>% mutate('distance' = zip_distance(df_1$user_loc, df_1$fr_loc))
+
+```
+
+
+Generating weights for  1256 zipcodes and merging it in a data frame.
+```{r}
+dim(user_loc)
+fr_loc <- df_1 %>% distinct(fr_loc)
+wt <- rnorm(1256,0.13,1)
+q_i <- data.frame(fr_loc,wt)
+```
+
+Further to create a weighted probabilities scaled by SCI and the weights of friend location we create a new data frame and mutate it with weighted SCI. 
+```{r}
+df_s <- merge(df_1,q_i,by="fr_loc")
+df_s <- df_s %>% mutate(wt_sci=probabilites*wt)
+```
+Now let's do some plotting of distance with wt_sci. 
+```{r}
+plot(df_s$distance$distance, df_s$wt_sci)
+plot(df_s$distance$distance, df_s$wt_sci, xlim = c(0, 30))
+```
