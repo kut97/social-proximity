@@ -63,3 +63,27 @@ Now let's do some plotting of distance with wt_sci.
 plot(df_s$distance$distance, df_s$wt_sci)
 plot(df_s$distance$distance, df_s$wt_sci, xlim = c(0, 30))
 ```
+```{r}
+# Download USA Income Tax Data by Zip code here: https://www.kaggle.com/datasets/wpncrh/zip-code-income-tax-data-2014?resource=download
+df_taxes <- read_csv ('14zpallagi.csv')
+```
+
+```{r}
+df_dep <- df_taxes %>% filter(STATE == 'PA')%>% select(zipcode, agi_stub, NUMDEP) %>% pivot_wider(names_from = c( "agi_stub"), values_from = c("NUMDEP"))
+df_dep_fr<- rename(df_dep, c('fr_loc_dep_1' = '1', 'fr_loc_dep_2' = '2', 'fr_loc_dep_3' = '3', 'fr_loc_dep_4'= '4', 'fr_loc_dep_5'= '5', 'fr_loc_dep_6'= '6' ))
+df_sci_dep <- merge(df_s, df_dep_fr, by.x = 'fr_loc', by.y = 'zipcode')
+df_dep_user<- rename(df_dep, c('user_loc_dep_1' = '1', 'user_loc_dep_2' = '2', 'user_loc_dep_3' = '3', 'user_loc_dep_4'= '4', 'user_loc_dep_5'= '5', 'user_loc_dep_6'= '6'))
+df_sci_dep <- merge(df_sci_dep, df_dep_user, by.x = 'user_loc', by.y = 'zipcode')
+```
+
+```{r}
+df_sci_dep <- df_sci_dep %>% mutate('diff_dep_1' = user_loc_dep_1 - fr_loc_dep_1)%>% mutate('diff_dep_2' = user_loc_dep_2 - fr_loc_dep_2)%>% mutate('diff_dep_3' = user_loc_dep_3 - fr_loc_dep_3)%>% mutate('diff_dep_4' = user_loc_dep_4 - fr_loc_dep_4)%>% mutate('diff_dep_5' = user_loc_dep_5 - fr_loc_dep_5)%>% mutate('diff_dep_6' = user_loc_dep_6 - fr_loc_dep_6)
+df_sci_dep$distance_btwn <- df_sci_dep$distance$distance
+df_sci_dep_simplified <- df_sci_dep %>% select(user_loc, fr_loc, wt_sci, distance_btwn, diff_dep_1, diff_dep_2, diff_dep_3, diff_dep_4, diff_dep_5, diff_dep_6)
+cor(df_sci_dep_simplified[3:10])
+data <- df_sci_dep_simplified[3:10] 
+```
+```{r}
+lm.fit <- lm(wt_sci~., data = data)
+summary(lm.fit)
+```
