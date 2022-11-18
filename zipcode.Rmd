@@ -84,6 +84,23 @@ cor(df_sci_dep_simplified[3:10])
 data <- df_sci_dep_simplified[3:10] 
 ```
 ```{r}
+tax_analysis <- function(variable){
+  df_var <- df_taxes %>% filter(STATE == 'PA')%>% select(zipcode, agi_stub, variable) %>% pivot_wider(names_from = c( "agi_stub"), values_from = c(variable))
+  df_var_fr<- rename(df_var, c('fr_loc_var_1' = '1','fr_loc_var_2' = '2', 'fr_loc_var_3' = '3', 'fr_loc_var_4'= '4', 'fr_loc_var_5'= '5', 'fr_loc_var_6'= '6' ))
+  df_sci_var <- merge(df_s, df_var_fr, by.x = 'fr_loc', by.y = 'zipcode')
+  df_var_user<- rename(df_var, c('user_loc_var_1' = '1', 'user_loc_var_2' = '2', 'user_loc_var_3' = '3', 'user_loc_var_4'= '4', 'user_loc_var_5'= '5', 'user_loc_var_6'= '6'))
+  df_sci_var <- merge(df_sci_var, df_var_user, by.x = 'user_loc', by.y = 'zipcode')
+  
+  df_sci_var <- df_sci_var %>% mutate('diff_var_1' = user_loc_var_1 - fr_loc_var_1)%>% mutate('diff_var_2' = user_loc_var_2 - fr_loc_var_2)%>% mutate('diff_var_3' = user_loc_var_3 - fr_loc_var_3)%>% mutate('diff_var_4' = user_loc_var_4 - fr_loc_var_4)%>% mutate('diff_var_5' = user_loc_var_5 - fr_loc_var_5)%>% mutate('diff_var_6' = user_loc_var_6 - fr_loc_var_6)
+  df_sci_var$distance_btwn <- df_sci_var$distance$distance
+  return(df_sci_var)
+}
+df_n1<- tax_analysis('N1')
+```
+```{r}
 lm.fit <- lm(wt_sci~., data = data)
 summary(lm.fit)
+df_n1_simplified <- df_n1 %>% select(user_loc, fr_loc, wt_sci, distance_btwn, diff_var_1, diff_var_2, diff_var_3, diff_var_4, diff_var_5, diff_var_6)
+cor(df_n1_simplified[3:10])
+data <- df_n1_simplified[3:10] 
 ```
