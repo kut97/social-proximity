@@ -95,7 +95,7 @@ tax_analysis <- function(variable){
   df_sci_var$distance_btwn <- df_sci_var$distance$distance
   return(df_sci_var)
 }
-df_n1<- tax_analysis('N1')
+df_n1<- tax_analysis('TCE')
 ```
 ```{r}
 lm.fit <- lm(wt_sci~., data = data)
@@ -103,4 +103,22 @@ summary(lm.fit)
 df_n1_simplified <- df_n1 %>% select(user_loc, fr_loc, wt_sci, distance_btwn, diff_var_1, diff_var_2, diff_var_3, diff_var_4, diff_var_5, diff_var_6)
 cor(df_n1_simplified[3:10])
 data <- df_n1_simplified[3:10] 
+```
+```{r}
+library(readxl)
+df_sdoh<- read_excel("SDOH_2020_ZIPCODE_1_0.xlsx", sheet = 'Data')
+df_sdoh <- df_health
+```
+```{r}
+df_sdoh_pa <- df_sdoh %>% filter(STATE == 'Pennsylvania')
+```
+After considering each possible predictor, we have selected predictors that seem like they might have helpful information regarding sci.
+```{r}
+df_sdoh_pa_selected <- df_sdoh_pa %>% select(3, 36, 37, 38, 41, 48, 53, 55, 56, 62, 81, 85, 91, 92, 96, 103, 104, 120, 121, 125, 129, 134, 136, 162, 181, 193, 194, 199, 200, 201, 202, 203, 204, 209, 216, 227, 230, 231, 240, 241, 245, 247, 249, 250, 254, 264, 265, 279, 282, 283, 284, 285, 286, 288, 289, 290, 291, 292, 299, 315, 318, 319)
+
+df_sdoh_pa_selected <- df_sdoh_pa %>% select(3,10, 37, 41, 53, 55, 56, 62, 81, 85, 91, 92, 96, 103, 104, 120, 121, 134, 136, 162, 181, 216, 227, 230, 231, 247, 250, 254, 264, 265, 282, 283, 284, 289, 291, 292, 315, 318)
+df_s$Count <- (1:261227)
+df_sdoh_sci_fr <- merge(df_s, df_sdoh_pa_selected, by.x = 'fr_loc', by.y = 'ZIPCODE') %>% sort(by = Count)
+df_sdoh_sci_user <- merge(df_s, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE') %>% sort(by = Count)
+df_<- df_sdoh_sci_fr[7:44] - df_sdoh_sci_user[ 7:44]
 ```

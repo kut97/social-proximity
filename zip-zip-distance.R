@@ -1,7 +1,7 @@
 
 
-COU <- read.table("C:/Users/86156/Desktop/Data Project/county_county.tsv", header=T, sep="\t")
-ZIP <- read.table("C:/Users/86156/Desktop/Data Project/Zip/zcta_zcta_shard1.tsv", header=T, sep="\t")
+COU <- read.table("county_county.tsv", header=T, sep="\t")
+ZIP <- read.table("zcta_zcta_shard1.tsv", header=T, sep="\t")
 library(zipcodeR)
 library(tidyverse)
 library(igraph)
