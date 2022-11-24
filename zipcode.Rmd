@@ -28,16 +28,6 @@ df_1 <- df_1 %>% distinct(probabilites,.keep_all = TRUE) ##single repeated pairw
 user_loc <- df_1 %>% distinct(user_loc)
 ```
 
-Add zipcode information
-```{r}
-library(zipcodeR)
-#user_loc
-#distance_list <- c()
-#for (i in 1: length(df_1$user_loc)){
-#   distance_list <-c(distance_list, zip_distance(df_1$user_loc[i], df_1$fr_loc[i][3]))
-#}
-#df_1$distance <- distance_list
-```
 ```{r}
 library(zipcodeR)
 df_1 <- df_1 %>% mutate('distance' = zip_distance(df_1$user_loc, df_1$fr_loc))
@@ -56,7 +46,7 @@ q_i <- data.frame(fr_loc,wt)
 Further to create a weighted probabilities scaled by SCI and the weights of friend location we create a new data frame and mutate it with weighted SCI. 
 ```{r}
 df_s <- merge(df_1,q_i,by="fr_loc")
-df_s <- df_s %>% mutate(wt_sci=probabilites*wt)
+df_s <- df_s %>% mutate(wt_sci=probabilites*wt) %>% filter(scaled_sci != 1)
 ```
 Now let's do some plotting of distance with wt_sci. 
 ```{r}
@@ -83,6 +73,7 @@ df_sci_dep_simplified <- df_sci_dep %>% select(user_loc, fr_loc, wt_sci, distanc
 cor(df_sci_dep_simplified[3:10])
 data <- df_sci_dep_simplified[3:10] 
 ```
+
 ```{r}
 tax_analysis <- function(variable){
   df_var <- df_taxes %>% filter(STATE == 'PA')%>% select(zipcode, agi_stub, variable) %>% pivot_wider(names_from = c( "agi_stub"), values_from = c(variable))
@@ -104,21 +95,40 @@ df_n1_simplified <- df_n1 %>% select(user_loc, fr_loc, wt_sci, distance_btwn, di
 cor(df_n1_simplified[3:10])
 data <- df_n1_simplified[3:10] 
 ```
+Now we will import social determinant of health data from: https://www.ahrq.gov/sdoh/data-analytics/sdoh-data.html. We will use 2020 data since the SCI data is from 2020.
 ```{r}
 library(readxl)
 df_sdoh<- read_excel("SDOH_2020_ZIPCODE_1_0.xlsx", sheet = 'Data')
-df_sdoh <- df_health
 ```
 ```{r}
 df_sdoh_pa <- df_sdoh %>% filter(STATE == 'Pennsylvania')
 ```
 After considering each possible predictor, we have selected predictors that seem like they might have helpful information regarding sci.
 ```{r}
-df_sdoh_pa_selected <- df_sdoh_pa %>% select(3, 36, 37, 38, 41, 48, 53, 55, 56, 62, 81, 85, 91, 92, 96, 103, 104, 120, 121, 125, 129, 134, 136, 162, 181, 193, 194, 199, 200, 201, 202, 203, 204, 209, 216, 227, 230, 231, 240, 241, 245, 247, 249, 250, 254, 264, 265, 279, 282, 283, 284, 285, 286, 288, 289, 290, 291, 292, 299, 315, 318, 319)
+#df_sdoh_pa_selected <- df_sdoh_pa %>% select(3, 36, 37, 38, 41, 48, 53, 55, 56, 62, 81, 85, 91, 92, 96, 103, 104, 120, 121, 125, 129, 134, 136, 162, 181, 193, 194, 199, 200, 201, 202, 203, 204, 209, 216, 227, 230, 231, 240, 241, 245, 247, 249, 250, 254, 264, 265, 279, 282, 283, 284, 285, 286, 288, 289, 290, 291, 292, 299, 315, 318, 319)
 
 df_sdoh_pa_selected <- df_sdoh_pa %>% select(3,10, 37, 41, 53, 55, 56, 62, 81, 85, 91, 92, 96, 103, 104, 120, 121, 134, 136, 162, 181, 216, 227, 230, 231, 247, 250, 254, 264, 265, 282, 283, 284, 289, 291, 292, 315, 318)
-df_s$Count <- (1:261227)
-df_sdoh_sci_fr <- merge(df_s, df_sdoh_pa_selected, by.x = 'fr_loc', by.y = 'ZIPCODE') %>% sort(by = Count)
-df_sdoh_sci_user <- merge(df_s, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE') %>% sort(by = Count)
-df_<- df_sdoh_sci_fr[7:44] - df_sdoh_sci_user[ 7:44]
+df_s <- df_s[order(as.numeric(rownames(df_s))),,drop=FALSE]
+df_s$Count <- (1:nrow(df_s))
+df_sdoh_sci_fr <- merge(df_s, df_sdoh_pa_selected, by.x = 'fr_loc', by.y = 'ZIPCODE')
+df_sdoh_sci_fr <- df_sdoh_sci_fr[order(as.numeric(rownames(df_sdoh_sci_fr))),,drop=FALSE]
+df_sdoh_sci_user <- merge(df_s, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE')
+df_sdoh_sci_user <- df_sdoh_sci_user[order(df_sdoh_sci_user$Count),,drop=FALSE]
+df_full <- df_sdoh_sci_fr[8:45] - df_sdoh_sci_user[ 8:45]
+df_full$distance <- df_s$distance$distance
+df_full$probabilities <- df_s$probabilites
+df_full$scaled_sci <- log(df_s$scaled_sci)
+df_full$fr_loc <- df_s$fr_loc
+df_full$user_loc <- df_s$user_loc
+```
+```{r}
+df_full <- na.omit(df_full)
+df_full <- df_full %>% filter(distance > 0)
+cor(df_full$scaled_sci, df_full[2:39])
+lm.fit <- lm(scaled_sci~., data = df_full[2:41])
+summary(lm.fit)
+```
+```{r}
+df_full$log_scaled_sci <- log(df_full$scaled_sci)
+plot(df_full$log_scaled_sci ,df_full$ACS_TOT_POP_US_ABOVE1_ZC)
 ```
