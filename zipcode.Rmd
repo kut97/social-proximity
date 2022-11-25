@@ -10,11 +10,15 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-Social Networks can be a significant factor in understanding the dynamics of various aspects of different fields such as social,economical and public health. In order to substanitate the intensity of social network between individuals Bailey et al proposed a relative frequency of Friendship links between different geographical unit called as Social Connectedness Index. Due to the nature of its relative frequency a comparision between the intensity of social ties across different locations can now be possible. Further Kulcher et al proposed another measure understanding the social influence of alters on ego called social proximity. This markdown file is a guide for other researchers who would want to make use of Social Proximity in there research.
+Social Networks can be a significant factor in understanding the dynamics of various aspects of different fields such as social,economical and public health. In order to substantiate the intensity of social network between individuals Bailey et al proposed a relative frequency of Friendship links between different geographical unit called as Social Connectedness Index. Due to the nature of its relative frequency a comparison between the intensity of social ties across different locations can now be possible. Further Kulcher et al proposed another measure understanding the social influence of alters on ego called social proximity. This markdown file is a guide for other researchers who would want to make use of Social Proximity in there research.
 
 ```{r}
 library(tidyverse)
 library(igraph)
+library(glmnet)
+library(pls)
+library(leaps)
+library(class)
 ```
 
 We create the social proximity values for each zipcode beginning with a 1. We then drop zipcodes that fall outside of Pennsylvania. As a first step we want to convert the SCI values into relative probabilities so we divide the SCI by the highest frequency of SCI and create a data frame with user location fr_locations and their probability values.
@@ -55,26 +59,26 @@ plot(df_s$distance$distance, df_s$wt_sci, xlim = c(0, 30))
 ```
 ```{r}
 # Download USA Income Tax Data by Zip code here: https://www.kaggle.com/datasets/wpncrh/zip-code-income-tax-data-2014?resource=download
-df_taxes <- read_csv ('14zpallagi.csv')
+#df_taxes <- read_csv ('14zpallagi.csv')
 ```
 
-```{r}
+#```{r}
 df_dep <- df_taxes %>% filter(STATE == 'PA')%>% select(zipcode, agi_stub, NUMDEP) %>% pivot_wider(names_from = c( "agi_stub"), values_from = c("NUMDEP"))
 df_dep_fr<- rename(df_dep, c('fr_loc_dep_1' = '1', 'fr_loc_dep_2' = '2', 'fr_loc_dep_3' = '3', 'fr_loc_dep_4'= '4', 'fr_loc_dep_5'= '5', 'fr_loc_dep_6'= '6' ))
 df_sci_dep <- merge(df_s, df_dep_fr, by.x = 'fr_loc', by.y = 'zipcode')
 df_dep_user<- rename(df_dep, c('user_loc_dep_1' = '1', 'user_loc_dep_2' = '2', 'user_loc_dep_3' = '3', 'user_loc_dep_4'= '4', 'user_loc_dep_5'= '5', 'user_loc_dep_6'= '6'))
 df_sci_dep <- merge(df_sci_dep, df_dep_user, by.x = 'user_loc', by.y = 'zipcode')
-```
+#```
 
-```{r}
+#```{r}
 df_sci_dep <- df_sci_dep %>% mutate('diff_dep_1' = user_loc_dep_1 - fr_loc_dep_1)%>% mutate('diff_dep_2' = user_loc_dep_2 - fr_loc_dep_2)%>% mutate('diff_dep_3' = user_loc_dep_3 - fr_loc_dep_3)%>% mutate('diff_dep_4' = user_loc_dep_4 - fr_loc_dep_4)%>% mutate('diff_dep_5' = user_loc_dep_5 - fr_loc_dep_5)%>% mutate('diff_dep_6' = user_loc_dep_6 - fr_loc_dep_6)
 df_sci_dep$distance_btwn <- df_sci_dep$distance$distance
 df_sci_dep_simplified <- df_sci_dep %>% select(user_loc, fr_loc, wt_sci, distance_btwn, diff_dep_1, diff_dep_2, diff_dep_3, diff_dep_4, diff_dep_5, diff_dep_6)
 cor(df_sci_dep_simplified[3:10])
 data <- df_sci_dep_simplified[3:10] 
-```
+#```
 
-```{r}
+#```{r}
 tax_analysis <- function(variable){
   df_var <- df_taxes %>% filter(STATE == 'PA')%>% select(zipcode, agi_stub, variable) %>% pivot_wider(names_from = c( "agi_stub"), values_from = c(variable))
   df_var_fr<- rename(df_var, c('fr_loc_var_1' = '1','fr_loc_var_2' = '2', 'fr_loc_var_3' = '3', 'fr_loc_var_4'= '4', 'fr_loc_var_5'= '5', 'fr_loc_var_6'= '6' ))
@@ -87,14 +91,14 @@ tax_analysis <- function(variable){
   return(df_sci_var)
 }
 df_n1<- tax_analysis('TCE')
-```
-```{r}
+#```
+#```{r}
 lm.fit <- lm(wt_sci~., data = data)
 summary(lm.fit)
 df_n1_simplified <- df_n1 %>% select(user_loc, fr_loc, wt_sci, distance_btwn, diff_var_1, diff_var_2, diff_var_3, diff_var_4, diff_var_5, diff_var_6)
 cor(df_n1_simplified[3:10])
 data <- df_n1_simplified[3:10] 
-```
+#```
 Now we will import social determinant of health data from: https://www.ahrq.gov/sdoh/data-analytics/sdoh-data.html. We will use 2020 data since the SCI data is from 2020.
 ```{r}
 library(readxl)
@@ -114,21 +118,88 @@ df_sdoh_sci_fr <- merge(df_s, df_sdoh_pa_selected, by.x = 'fr_loc', by.y = 'ZIPC
 df_sdoh_sci_fr <- df_sdoh_sci_fr[order(as.numeric(rownames(df_sdoh_sci_fr))),,drop=FALSE]
 df_sdoh_sci_user <- merge(df_s, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE')
 df_sdoh_sci_user <- df_sdoh_sci_user[order(df_sdoh_sci_user$Count),,drop=FALSE]
-df_full <- df_sdoh_sci_fr[8:45] - df_sdoh_sci_user[ 8:45]
+df_full <- abs(df_sdoh_sci_fr[8:45] - df_sdoh_sci_user[ 8:45])
+
+#Add respective data from sci data frame
 df_full$distance <- df_s$distance$distance
-df_full$probabilities <- df_s$probabilites
+#Take log of scaled_sci, from looking at the graphs of data and then the affects on analysis we decided to transform the scaled_sci
 df_full$scaled_sci <- log(df_s$scaled_sci)
 df_full$fr_loc <- df_s$fr_loc
 df_full$user_loc <- df_s$user_loc
 ```
+
 ```{r}
+#Clean the data a little: Drop NAs. Omit any rows with distance = 0. These are sci pairs within the same zipcode, and won't be able to be predicted from differences. This analysis will need to be done separately. 
 df_full <- na.omit(df_full)
-df_full <- df_full %>% filter(distance > 0)
+data <- df_full[2:40] %>% filter(distance > 0)
+
+
+#Let's look a little at the correlations before digging in for further analysis
 cor(df_full$scaled_sci, df_full[2:39])
+```
+There is a moderately strong negative correlation between distance and sci_scaled.None of the other variables have strong correlations but a few of them have some weak corelations (Cen_popdensity_zc, acs_tot_pop_us_above1_zc, etc.)
+
+
+```{r}
+set.seed(2)
+
+#Create a training and test set with an 80/20 split.
+test_index <- sample(1:nrow(data), nrow(data)/5)
+allnums<- (1:nrow(data))
+train_index<- allnums[-test_index]
+train <- data[train_index,]
+test <- data[test_index,]
+```
+Now it is time to start building models.
+Let's start by running multiple linear regression with all of the predictors. 
+Since we are using MSE as a way to compare models, we will store all of the MSEs in one MSE list as we go.
+
+```{r, warning = FALSE}
+lm.fit <- lm(scaled_sci~., data = train)
+predict <- predict.lm(lm.fit, newdata= test)
+
+#Calculate MSE for this model and add to list
+MSE.Full.MultiLin <- mean((test$scaled_sci - predict)^2)
+MSE.Full.MultiLin
+
+#Create empty MSE vector and empty vector names for the MSE
+MSE_All <- c(MSE.Full.MultiLin)
+MSE_Name <- c('Full MLR')
+```
+
+Now we will try forward selection to find the best multiple linear regression model.
+```{r, warning = FALSE}
+#Fit Models
+regfit.fwd <- regsubsets (scaled_sci ~ ., data = train, nvmax = 38 , method = "forward")
+test.mat <- model.matrix(scaled_sci ~., data = test)
+regfit.fwd
+
+#Calculate MSE for each model size
+val.errors <- rep (NA , 38)
+for (i in 1:38) {
+  coefi <- coef ( regfit.fwd , id = i)
+  pred <- test.mat [, names ( coefi )] %*% coefi
+  val.errors [ i] <- mean (( test$Count - pred ) ^2)
+}
+val.errors
+
+#Find the model with the smallest MSE
+which.min(val.errors)
+MSE.Forward <- val.errors[which.min(val.errors)]
+MSE.Forward
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.Forward)
+MSE_Name <- c(MSE_Name, 'Fwd Select')
+```
+47 predictors minimize the MSE to 172890.6.
+
+
+```{r}
 lm.fit <- lm(scaled_sci~., data = df_full[2:41])
 summary(lm.fit)
 ```
 ```{r}
 df_full$log_scaled_sci <- log(df_full$scaled_sci)
-plot(df_full$log_scaled_sci ,df_full$ACS_TOT_POP_US_ABOVE1_ZC)
+plot(df_full$ACS_PCT_UNINSURED_ZC , df_full$log_scaled_sci)
 ```
