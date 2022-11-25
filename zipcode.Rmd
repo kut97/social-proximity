@@ -179,7 +179,7 @@ val.errors <- rep (NA , 38)
 for (i in 1:38) {
   coefi <- coef ( regfit.fwd , id = i)
   pred <- test.mat [, names ( coefi )] %*% coefi
-  val.errors [ i] <- mean (( test$Count - pred ) ^2)
+  val.errors [ i] <- mean (( test$scaled_sci - pred ) ^2)
 }
 val.errors
 
@@ -192,14 +192,14 @@ MSE.Forward
 MSE_All <- c(MSE_All, MSE.Forward)
 MSE_Name <- c(MSE_Name, 'Fwd Select')
 ```
-47 predictors minimize the MSE to 172890.6.
+35 predictors minimize the MSE to 1.06849.
 
-
+Let's look more closely at this model
 ```{r}
-lm.fit <- lm(scaled_sci~., data = df_full[2:41])
-summary(lm.fit)
-```
-```{r}
-df_full$log_scaled_sci <- log(df_full$scaled_sci)
-plot(df_full$ACS_PCT_UNINSURED_ZC , df_full$log_scaled_sci)
+fwd_select_data <- subset(data, select = -c(ACS_PCT_ASIAN_ZC, ACS_PCT_HH_NO_INTERNET_ZC, ACS_PCT_COLLEGE_ASSOCIATE_DGR_ZC))
+fwd_train <- fwd_select_data[train_index,]
+fwd_test <- fwd_select_data[test_index,]
+fwd.fit <- lm(scaled_sci~. , data = fwd_train)
+predict <- predict.lm(fwd.fit, newdata= fwd_test)
+summary(fwd.fit)
 ```
