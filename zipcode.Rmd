@@ -203,3 +203,85 @@ fwd.fit <- lm(scaled_sci~. , data = fwd_train)
 predict <- predict.lm(fwd.fit, newdata= fwd_test)
 summary(fwd.fit)
 ```
+We also need to investigate what causes variability in sci scores within one zip code.
+```{r}
+df_same_zip <- df_s %>% filter(distance$distance == 0)
+df_same_zip_merged <- merge(df_same_zip, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE')
+same_zip_data <- subset(df_same_zip_merged, select = -c(user_loc, fr_loc, distance, Count, probabilites, wt, wt_sci))
+same_zip_data <- na.omit(same_zip_data)
+cor(same_zip_data$scaled_sci, same_zip_data[2:38])
+```
+From the below plot, we can see that it might be of worth to take the log of sci. 
+```{r}
+plot(same_zip_data$scaled_sci, same_zip_data$ACS_PCT_HH_SMARTPHONE_ZC)
+same_zip_data$scaled_sci <- log(same_zip_data$scaled_sci)
+plot(same_zip_data$scaled_sci, same_zip_data$ACS_PCT_HH_SMARTPHONE_ZC)
+cor(same_zip_data$scaled_sci, same_zip_data[2:38])
+```
+Most of the correlations have increased, which should help us with our model. 
+
+```{r}
+set.seed(18)
+
+#Create a training and test set with an 80/20 split.
+test_index_same <- sample(1:nrow(same_zip_data), nrow(same_zip_data)/5)
+allnums<- (1:nrow(same_zip_data))
+train_index_same<- allnums[-test_index_same]
+train_same <- same_zip_data[train_index_same,]
+test_same <- same_zip_data[test_index_same,]
+```
+
+Now it is time to start building models.
+Let's start by running multiple linear regression with all of the predictors. 
+Since we are using MSE as a way to compare models, we will store all of the MSEs in one MSE list as we go.
+
+```{r, warning = FALSE}
+lm.fit_same <- lm(scaled_sci~., data = train_same)
+predict <- predict.lm(lm.fit_same, newdata= test_same)
+
+#Calculate MSE for this model and add to list
+MSE.Full.MultiLin_same <- mean((test_same$scaled_sci - predict)^2)
+MSE.Full.MultiLin_same
+
+#Create empty MSE vector and empty vector names for the MSE
+MSE_All <- c(MSE.Full.MultiLin_same)
+MSE_Name <- c('Full MLR Same Zip')
+```
+
+Now we will try forward selection to find the best multiple linear regression model.
+```{r, warning = FALSE}
+#Fit Models
+regfit.fwd_same <- regsubsets (scaled_sci ~ ., data = train_same, nvmax = 37 , method = "forward")
+test.mat_same <- model.matrix(scaled_sci ~., data = test_same)
+regfit.fwd_same
+
+#Calculate MSE for each model size
+val.errors_same <- rep (NA , 37)
+for (i in 1:37) {
+  coefi <- coef ( regfit.fwd_same , id = i)
+  pred <- test.mat_same [, names ( coefi )] %*% coefi
+  val.errors_same [ i] <- mean (( test_same$scaled_sci - pred ) ^2)
+}
+val.errors_same
+
+#Find the model with the smallest MSE
+which.min(val.errors_same)
+MSE.Forward_same <- val.errors_same[which.min(val.errors_same)]
+MSE.Forward_same
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.Forward_same)
+MSE_Name <- c(MSE_Name, 'Fwd Select Same')
+```
+9 predictors minimize our MSE to .3447035.
+
+Let's look more closely at this model
+```{r}
+fwd_select_data_same <- subset(same_zip_data, select = c(scaled_sci, ACS_TOT_POP_US_ABOVE1_ZC, ACS_PCT_FOREIGN_BORN_ZC, ACS_PCT_HISPANIC_ZC, ACS_PCT_WHITE_ZC, ACS_PCT_HH_SMARTPHONE_ZC, ACS_PCT_HH_CELLULAR_ZC, ACS_PCT_HH_FOOD_STMP_BLW_POV_ZC, ACS_PCT_BACHELOR_DGR_ZC, ACS_PCT_HU_NO_VEH_ZC))
+fwd_train_same <- fwd_select_data_same[train_index_same,]
+fwd_test_same <- fwd_select_data_same[test_index_same,]
+fwd.fit_same <- lm(scaled_sci~. , data = fwd_train_same)
+predict <- predict.lm(fwd.fit_same, newdata= fwd_test_same)
+summary(fwd.fit_same)
+```
+With this model we have a multiple r squared of .7539, meaning we are able to explain about 75% of the variability in log(scaled_sci) with the 9 above predictors.
