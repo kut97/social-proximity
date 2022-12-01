@@ -65,9 +65,46 @@ ZIP_PA_DIS <- merge(ZIP_PA_DIS,ZC2, by = 'fr_loc')
 
 ```{r}
 
+u_r <- read.csv("C:/Users/86156/Desktop/Data Project/urban_rural.csv")
+
+ZIP_PA_DIS <- merge(ZIP_PA_DIS,u_r, by.x = 'county_user', by.y = 'County')
+ZIP_PA_DIS <- merge(ZIP_PA_DIS,u_r, by.x = 'county_fr', by.y = 'County')
+
+ZIP_PA_DIS <- plyr::rename(ZIP_PA_DIS, c('U_R.x'='ur_user','U_R.y'='ur_fr'))
 
 ```
 
+```{r}
+
+ZIP_PA_DIS$ur_user[ZIP_PA_DIS$ur_user=="Rural"] = -1
+ZIP_PA_DIS$ur_user[ZIP_PA_DIS$ur_user=="Urban"] = 1
+ZIP_PA_DIS$ur_fr[ZIP_PA_DIS$ur_fr=="Rural"] = -1
+ZIP_PA_DIS$ur_fr[ZIP_PA_DIS$ur_fr=="Urban"] = 1
+
+ZIP_PA_DIS$ur_user <- as.numeric(ZIP_PA_DIS$ur_user)
+ZIP_PA_DIS$ur_fr <- as.numeric(ZIP_PA_DIS$ur_fr)
+
+ZIP_PA_DIS <- ZIP_PA_DIS %>%
+  mutate('corelation' = ur_user*ur_fr)
+
+ZIP_PA_DIS$corelation <- as.factor(ZIP_PA_DIS$corelation)
+
+```
+
+```{r}
+
+ggplot(ZIP_PA_DIS, aes(x=corelation , y = log(scaled_sci))) +
+  geom_boxplot()
+
+t.test(ZIP_PA_DIS$scaled_sci ~ ZIP_PA_DIS$corelation)
+
+```
+
+```{r}
+
+
+
+```
 
 
 
