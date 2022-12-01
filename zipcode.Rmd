@@ -19,6 +19,8 @@ library(glmnet)
 library(pls)
 library(leaps)
 library(class)
+library(tree)
+library (randomForest)
 ```
 
 We create the social proximity values for each zipcode beginning with a 1. We then drop zipcodes that fall outside of Pennsylvania. As a first step we want to convert the SCI values into relative probabilities so we divide the SCI by the highest frequency of SCI and create a data frame with user location fr_locations and their probability values.
@@ -203,6 +205,97 @@ fwd.fit <- lm(scaled_sci~. , data = fwd_train)
 predict <- predict.lm(fwd.fit, newdata= fwd_test)
 summary(fwd.fit)
 ```
+Next we will run Ridge Regression to see if we can decrease the MSE
+```{r}
+#Format data and grid to prep for Ridge Regression
+x <- model.matrix(scaled_sci~., data)[,-1]
+y <- data$scaled_sci
+y.test <-y[test_index]
+grid <- 10^seq(10, -2, length = 100)
+
+#Fit the Model
+ridge.mod <- glmnet(x[train_index,], y[train_index], alpha = 0, lamda = grid, thresh = 1e-12)
+
+set.seed(30)
+
+#Use Cross validation to find best value of lambda
+cv.out <- cv.glmnet(x[train_index,], y[train_index], alpha = 0)
+plot(cv.out)
+bestlam <- cv.out$lambda.min
+bestlam
+
+#Fit predictions with best value of lambda
+ridge.pred <- predict(ridge.mod, s = bestlam, newx = x[test_index, ])
+
+#Calculate MSE
+MSE.ridge <- mean((ridge.pred - y.test)^2)
+MSE.ridge
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.ridge)
+MSE_Name <- c(MSE_Name, 'Ridge')
+```
+The ridge MSE is 1.076508, which is actually slightly higher than our forward selection model.
+
+Next we will run Lasso
+```{r}
+#Build the model
+lasso.mod <- glmnet(x[train_index, ], y[train_index], alpha =1, lamda = grid)
+plot(lasso.mod)
+set.seed(52)
+
+#Use cross validation to select best value of lamda
+cv.out <- cv.glmnet(x[train_index, ], y[train_index], alpha = 1)
+plot(cv.out)
+bestlam <- cv.out$lambda.min 
+
+#Fit predictions for test set using best value of lambda
+lasso.pred <- predict(lasso.mod, s = bestlam, newx = x[test_index, ])
+
+#Calculate MSE
+MSE.lasso <- mean((lasso.pred - y.test)^2)
+
+#Look at variables of interest
+out <-  glmnet( x, y, alpha = 1, lamda = grid)
+lasso.coef <- predict(out, type = 'coefficients', s = bestlam)[1:18,]
+lasso.coef
+MSE.lasso
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.lasso)
+MSE_Name <- c(MSE_Name, 'Lasso')
+```
+The MSE with Lasso is slightly lower than the MSE we got from forward selection: 1.068451 vs 1.06849.
+
+Next we will create a tree
+```{r, warning = FALSE}
+set.seed(77)
+#Build and plot the tree
+tree <- tree( scaled_sci ~ ., data, subset = train_index )
+plot(tree)
+summary(tree)
+text(tree, pretty = 0, cex = .5)
+
+#Make predictions and calculate MSE
+tree.pred <- predict(tree, test)
+MSE.tree <- mean((tree.pred - test$scaled_sci)^2)
+MSE.tree
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.tree)
+MSE_Name <- c(MSE_Name, 'Full Tree')
+```
+The MSE of the full tree is .8495738, the lowest MSE yet.
+
+Let's use cross validation to see if we should prune the tree
+```{r, warning = FALSE}
+#Run cross validation and plot to see which size is the best
+cv.tree <- cv.tree(tree)
+plot(cv.tree$size, cv.tree$dev, type = 'b')
+```
+It does not seem as though pruning the tree will improve the model, so we can stick with what we have so far. 
+
+
 We also need to investigate what causes variability in sci scores within one zip code.
 ```{r}
 df_same_zip <- df_s %>% filter(distance$distance == 0)
@@ -285,3 +378,85 @@ predict <- predict.lm(fwd.fit_same, newdata= fwd_test_same)
 summary(fwd.fit_same)
 ```
 With this model we have a multiple r squared of .7539, meaning we are able to explain about 75% of the variability in log(scaled_sci) with the 9 above predictors.
+
+Next we will run Ridge Regression on the same zipcodes to see if we can decrease the MSE
+```{r}
+#Format data and grid to prep for Ridge Regression
+x <- model.matrix(scaled_sci~., same_zip_data)[,-1]
+y <- same_zip_data$scaled_sci
+y.test <-y[test_index_same]
+grid <- 10^seq(10, -2, length = 100)
+
+#Fit the Model
+ridge.mod_same <- glmnet(x[train_index_same,], y[train_index_same], alpha = 0, lamda = grid, thresh = 1e-12)
+
+set.seed(15)
+
+#Use Cross validation to find best value of lambda
+cv.out_same <- cv.glmnet(x[train_index_same,], y[train_index_same], alpha = 0)
+plot(cv.out_same)
+bestlam_same <- cv.out_same$lambda.min
+bestlam_same
+
+#Fit predictions with best value of lambda
+ridge.pred_same <- predict(ridge.mod_same, s = bestlam_same, newx = x[test_index_same, ])
+
+#Calculate MSE
+MSE.ridge_same <- mean((ridge.pred_same - y.test)^2)
+MSE.ridge_same
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.ridge_same)
+MSE_Name <- c(MSE_Name, 'Ridge Same')
+```
+The ridge MSE is .3546, which is actually slightly higher than our forward selection model.
+
+Next we will run Lasso
+```{r}
+#Build the model
+lasso.mod_same <- glmnet(x[train_index_same, ], y[train_index_same], alpha =1, lamda = grid)
+plot(lasso.mod_same)
+set.seed(117)
+
+#Use cross validation to select best value of lamda
+cv.out_same <- cv.glmnet(x[train_index_same, ], y[train_index_same], alpha = 1)
+plot(cv.out_same)
+bestlam_same <- cv.out_same$lambda.min 
+
+#Fit predictions for test set using best value of lambda
+lasso.pred_same <- predict(lasso.mod_same, s = bestlam_same, newx = x[test_index_same, ])
+
+#Calculate MSE
+MSE.lasso_same <- mean((lasso.pred_same - y.test)^2)
+
+#Look at variables of interest
+out <-  glmnet( x, y, alpha = 1, lamda = grid)
+lasso.coef <- predict(out, type = 'coefficients', s = bestlam)[1:18,]
+lasso.coef
+MSE.lasso_same
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.lasso)
+MSE_Name <- c(MSE_Name, 'Lasso')
+```
+The MSE with Lasso is slightly lower than the MSE we got from forward selection: .342968 vs .3447035.
+
+Next we will create a tree
+```{r, warning = FALSE}
+set.seed(77)
+#Build and plot the tree
+tree_same <- tree( scaled_sci ~ ., same_zip_data, subset = train_index_same )
+plot(tree_same)
+summary(tree_same)
+text(tree_same, pretty = 0, cex = .5)
+
+#Make predictions and calculate MSE
+tree.pred_same <- predict(tree_same, test_same)
+MSE.tree_same <- mean((tree.pred_same - test_same$scaled_sci)^2)
+MSE.tree_same
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.tree)
+MSE_Name <- c(MSE_Name, 'Full Tree')
+```
+The MSE is higher for the decison tree than it is for Lasso or forward selection.
