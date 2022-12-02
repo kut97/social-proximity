@@ -152,7 +152,7 @@ for (i in 2:39){
 cor(df_normalized$scaled_sci, df_normalized[2:39])
 data <- df_normalized[2:40] %>% filter(distance > 0)
 ```
-There is a moderately strong negative correlation between distance and sci_scaled.None of the other variables have strong correlations but a few of them have some weak correlations (acs_pct_publ_transit_zc, acs_tot_pop_us_above1_zc, etc.)
+There is a moderately strong negative correlation between distance and sci_scaled. None of the other variables have strong correlations but a few of them have some weak correlations (acs_pct_publ_transit_zc, acs_tot_pop_us_above1_zc, etc.)
 
 
 ```{r}
@@ -188,7 +188,6 @@ Now we will try forward selection to find the best multiple linear regression mo
 #Fit Models
 regfit.fwd <- regsubsets (scaled_sci ~ ., data = train, nvmax = 38 , method = "forward")
 test.mat <- model.matrix(scaled_sci ~., data = test)
-regfit.fwd
 
 #Calculate MSE for each model size
 val.errors <- rep (NA , 38)
@@ -289,14 +288,16 @@ Next we will create a tree
 set.seed(77)
 #Build and plot the tree
 data_tree <- df_full[2:40] %>% filter(distance > 0)
+train_tree <- data_tree[train_index,]
+test_tree <- data_tree[test_index,]
 tree <- tree( scaled_sci ~ ., data_tree, subset = train_index )
 plot(tree)
 summary(tree)
 text(tree, pretty = 0, cex = .5)
 
 #Make predictions and calculate MSE
-tree.pred <- predict(tree, test)
-MSE.tree <- mean((tree.pred - test$scaled_sci)^2)
+tree.pred <- predict(tree, test_tree)
+MSE.tree <- mean((tree.pred - test_tree$scaled_sci)^2)
 MSE.tree
 
 #Add MSE and Name to lists
@@ -315,7 +316,13 @@ plot(cv.tree$size, cv.tree$dev, type = 'b')
 ```
 It does not seem as though pruning the tree will improve the model, so we can stick with what we have so far. 
 
-
+Although we have found the decision tree works bests, let's look at a graph of all the MSEs of all of the models we tried.
+```{r}
+plot(MSE_All)
+color <- c(rep('Red', 4), 'Green')
+MSE_All
+barplot(MSE_All, names.arg = MSE_Name, las = 2, cex.names = .7, col = color, ylab = 'MSE', xlab = 'Model' )
+```
 We also need to investigate what causes variability in sci scores within one zip code.
 ```{r}
 df_same_zip <- df_s %>% filter(distance$distance == 0)
@@ -367,8 +374,8 @@ MSE.Full.MultiLin_same <- mean((test_same$scaled_sci - predict)^2)
 MSE.Full.MultiLin_same
 
 #Create empty MSE vector and empty vector names for the MSE
-MSE_All <- c(MSE.Full.MultiLin_same)
-MSE_Name <- c('Full MLR Same Zip')
+MSE_All_Same <- c(MSE.Full.MultiLin_same)
+MSE_Name_Same <- c('Full MLR Same Zip')
 ```
 Our MSE for the multiple linear regression is .362492
 
@@ -394,8 +401,8 @@ MSE.Forward_same <- val.errors_same[which.min(val.errors_same)]
 MSE.Forward_same
 
 #Add MSE and Name to lists
-MSE_All <- c(MSE_All, MSE.Forward_same)
-MSE_Name <- c(MSE_Name, 'Fwd Select Same')
+MSE_All_Same <- c(MSE_All_Same, MSE.Forward_same)
+MSE_Name_Same <- c(MSE_Name_Same, 'Fwd Select Same')
 ```
 9 predictors minimize our MSE to .3447035.
 
@@ -437,8 +444,8 @@ MSE.ridge_same <- mean((ridge.pred_same - y.test)^2)
 MSE.ridge_same
 
 #Add MSE and Name to lists
-MSE_All <- c(MSE_All, MSE.ridge_same)
-MSE_Name <- c(MSE_Name, 'Ridge Same')
+MSE_All_Same <- c(MSE_All_Same, MSE.ridge_same)
+MSE_Name_Same <- c(MSE_Name_Same, 'Ridge Same')
 ```
 The ridge MSE is .3546, which is actually slightly higher than our forward selection model.
 
@@ -467,8 +474,8 @@ lasso.coef
 MSE.lasso_same
 
 #Add MSE and Name to lists
-MSE_All <- c(MSE_All, MSE.lasso)
-MSE_Name <- c(MSE_Name, 'Lasso')
+MSE_All_Same <- c(MSE_All_Same, MSE.lasso)
+MSE_Name_Same <- c(MSE_Name_Same, 'Lasso')
 ```
 The MSE with Lasso is slightly lower than the MSE we got from forward selection: .342968 vs .3447035.
 
@@ -487,7 +494,7 @@ MSE.tree_same <- mean((tree.pred_same - test_same$scaled_sci)^2)
 MSE.tree_same
 
 #Add MSE and Name to lists
-MSE_All <- c(MSE_All, MSE.tree)
-MSE_Name <- c(MSE_Name, 'Full Tree')
+MSE_All_Same <- c(MSE_All_Same, MSE.tree)
+MSE_Name_Same <- c(MSE_Name_Same, 'Full Tree')
 ```
 The MSE is higher for the decision tree than it is for Lasso or forward selection.
