@@ -8,7 +8,14 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+To do:
 
+***add maps*** - ask Kushagra **connect if sci > threshold** plot map with thickness of lines being the sci (thicker = higher sci)
+***provide connectivity for census tract*** - Zitao and Yanrong **produce sci for census tract** **weighting by proportion of zipcode in a census tract**
+**create meta data** - Erin
+** put in jupyter notebook**
+**combine rural/urban with this analysis**
+**clean it up**
 
 Social Networks can be a significant factor in understanding the dynamics of various aspects of different fields such as social,economical and public health. In order to substantiate the intensity of social network between individuals Bailey et al proposed a relative frequency of Friendship links between different geographical unit called as Social Connectedness Index. Due to the nature of its relative frequency a comparison between the intensity of social ties across different locations can now be possible. Further Kulcher et al proposed another measure understanding the social influence of alters on ego called social proximity. This markdown file is a guide for other researchers who would want to make use of Social Proximity in there research.
 
@@ -130,16 +137,22 @@ df_full$fr_loc <- df_s$fr_loc
 df_full$user_loc <- df_s$user_loc
 ```
 
+
 ```{r}
 #Clean the data a little: Drop NAs. Omit any rows with distance = 0. These are sci pairs within the same zipcode, and won't be able to be predicted from differences. This analysis will need to be done separately. 
 df_full <- na.omit(df_full)
-data <- df_full[2:40] %>% filter(distance > 0)
 
+#Let's normalize the data
+df_normalized <- df_full
+for (i in 2:39){
+  df_normalized[,i]<-((df_full[,i] - min(df_full[,i]))/((max(df_full[,i])-min(df_full[,i]))))
+}
 
 #Let's look a little at the correlations before digging in for further analysis
-cor(df_full$scaled_sci, df_full[2:39])
+cor(df_normalized$scaled_sci, df_normalized[2:39])
+data <- df_normalized[2:40] %>% filter(distance > 0)
 ```
-There is a moderately strong negative correlation between distance and sci_scaled.None of the other variables have strong correlations but a few of them have some weak corelations (Cen_popdensity_zc, acs_tot_pop_us_above1_zc, etc.)
+There is a moderately strong negative correlation between distance and sci_scaled.None of the other variables have strong correlations but a few of them have some weak correlations (acs_pct_publ_transit_zc, acs_tot_pop_us_above1_zc, etc.)
 
 
 ```{r}
@@ -168,6 +181,7 @@ MSE.Full.MultiLin
 MSE_All <- c(MSE.Full.MultiLin)
 MSE_Name <- c('Full MLR')
 ```
+Full linear regression leads to an MSE of 1.068526.
 
 Now we will try forward selection to find the best multiple linear regression model.
 ```{r, warning = FALSE}
@@ -194,18 +208,21 @@ MSE.Forward
 MSE_All <- c(MSE_All, MSE.Forward)
 MSE_Name <- c(MSE_Name, 'Fwd Select')
 ```
-35 predictors minimize the MSE to 1.06849.
+35 predictors minimize the MSE to 1.06489
 
-Let's look more closely at this model
+Let's look more closely at this model:
+
 ```{r}
-fwd_select_data <- subset(data, select = -c(ACS_PCT_ASIAN_ZC, ACS_PCT_HH_NO_INTERNET_ZC, ACS_PCT_COLLEGE_ASSOCIATE_DGR_ZC))
+fwd_select_data <- subset(data, select = -c(ACS_PCT_BLACK_ZC, ACS_PER_CAPITA_INC_ZC, ACS_PCT_COLLEGE_ASSOCIATE_DGR_ZC))
 fwd_train <- fwd_select_data[train_index,]
 fwd_test <- fwd_select_data[test_index,]
 fwd.fit <- lm(scaled_sci~. , data = fwd_train)
 predict <- predict.lm(fwd.fit, newdata= fwd_test)
 summary(fwd.fit)
 ```
-Next we will run Ridge Regression to see if we can decrease the MSE
+The adjusted R-squared is .6144. In context, this tells us we are able to explain about 61% of the variability of log(scaled_sci) with our predictors. 
+Next we will run Ridge Regression to see if we can decrease the MSE. Looking at the estimates of the coefficients, distance seems by far to explain the greatest variability. The other variables contributing most to the model are ACS_PCT_WHITE_ZC, ACS_TOT_POP_US_ABOVE1_ZC, and ACS_PCT_PUBL_TRANSIT_ZC.
+
 ```{r}
 #Format data and grid to prep for Ridge Regression
 x <- model.matrix(scaled_sci~., data)[,-1]
@@ -265,13 +282,14 @@ MSE.lasso
 MSE_All <- c(MSE_All, MSE.lasso)
 MSE_Name <- c(MSE_Name, 'Lasso')
 ```
-The MSE with Lasso is slightly lower than the MSE we got from forward selection: 1.068451 vs 1.06849.
+The MSE with Lasso is slightly higher than the MSE we got from forward selection: 1.06489.
 
 Next we will create a tree
 ```{r, warning = FALSE}
 set.seed(77)
 #Build and plot the tree
-tree <- tree( scaled_sci ~ ., data, subset = train_index )
+data_tree <- df_full[2:40] %>% filter(distance > 0)
+tree <- tree( scaled_sci ~ ., data_tree, subset = train_index )
 plot(tree)
 summary(tree)
 text(tree, pretty = 0, cex = .5)
@@ -286,6 +304,8 @@ MSE_All <- c(MSE_All, MSE.tree)
 MSE_Name <- c(MSE_Name, 'Full Tree')
 ```
 The MSE of the full tree is .8495738, the lowest MSE yet.
+
+We are able to improve the model from before, just using distance and ACS_PCT_PUBL_TRANSIT_ZC. 
 
 Let's use cross validation to see if we should prune the tree
 ```{r, warning = FALSE}
@@ -302,12 +322,22 @@ df_same_zip <- df_s %>% filter(distance$distance == 0)
 df_same_zip_merged <- merge(df_same_zip, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE')
 same_zip_data <- subset(df_same_zip_merged, select = -c(user_loc, fr_loc, distance, Count, probabilites, wt, wt_sci))
 same_zip_data <- na.omit(same_zip_data)
+
+#Let's normalize the data
+df_normalized_same <- same_zip_data
+for (i in 2:38){
+  df_normalized_same[,i]<-((same_zip_data[,i] - min(same_zip_data[,i]))/((max(same_zip_data[,i])-min(same_zip_data[,i]))))
+}
+same_zip_data <- df_normalized_same
 cor(same_zip_data$scaled_sci, same_zip_data[2:38])
 ```
 From the below plot, we can see that it might be of worth to take the log of sci. 
+
+***Document variables meta data, mobility based sci- criterion**
 ```{r}
 plot(same_zip_data$scaled_sci, same_zip_data$ACS_PCT_HH_SMARTPHONE_ZC)
 same_zip_data$scaled_sci <- log(same_zip_data$scaled_sci)
+
 plot(same_zip_data$scaled_sci, same_zip_data$ACS_PCT_HH_SMARTPHONE_ZC)
 cor(same_zip_data$scaled_sci, same_zip_data[2:38])
 ```
@@ -340,6 +370,7 @@ MSE.Full.MultiLin_same
 MSE_All <- c(MSE.Full.MultiLin_same)
 MSE_Name <- c('Full MLR Same Zip')
 ```
+Our MSE for the multiple linear regression is .362492
 
 Now we will try forward selection to find the best multiple linear regression model.
 ```{r, warning = FALSE}
@@ -377,7 +408,7 @@ fwd.fit_same <- lm(scaled_sci~. , data = fwd_train_same)
 predict <- predict.lm(fwd.fit_same, newdata= fwd_test_same)
 summary(fwd.fit_same)
 ```
-With this model we have a multiple r squared of .7539, meaning we are able to explain about 75% of the variability in log(scaled_sci) with the 9 above predictors.
+With this model we have a multiple r squared of .7539, meaning we are able to explain about 75% of the variability in log(scaled_sci) with the 9 above predictors.ACS_TOT_POP_US_ABOVE1_ZC seems to have the highest impact on our model and ACS_PCT_BACHELOR_DGR_ZC having the second highest impact. ACS_PCT_HH_SMARTPHONE_ZC seems to contribute the least out of all the variables in the model, while the other 6 variables seem to contribute at similar rates.
 
 Next we will run Ridge Regression on the same zipcodes to see if we can decrease the MSE
 ```{r}
@@ -459,4 +490,4 @@ MSE.tree_same
 MSE_All <- c(MSE_All, MSE.tree)
 MSE_Name <- c(MSE_Name, 'Full Tree')
 ```
-The MSE is higher for the decison tree than it is for Lasso or forward selection.
+The MSE is higher for the decision tree than it is for Lasso or forward selection.
