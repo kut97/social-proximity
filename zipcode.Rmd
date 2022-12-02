@@ -22,49 +22,104 @@ Social Networks can be a significant factor in understanding the dynamics of var
 ```{r}
 library(tidyverse)
 library(igraph)
+library(ggplot2)
+library(geodist)
+library(zipcodeR)
 library(glmnet)
 library(pls)
 library(leaps)
 library(class)
 library(tree)
-library (randomForest)
+
 ```
-
-We create the social proximity values for each zipcode beginning with a 1. We then drop zipcodes that fall outside of Pennsylvania. As a first step we want to convert the SCI values into relative probabilities so we divide the SCI by the highest frequency of SCI and create a data frame with user location fr_locations and their probability values.
-
 ```{r}
-df_0 <- read_tsv ('zcta_zcta_shard1.tsv')
-df_0 <- df_0 %>% dplyr::mutate(probabilites=scaled_sci/(1000000000)) 
-df_1 <- df_0 %>% dplyr::filter(user_loc %in% 15001:19612 & fr_loc %in% 15001:19612)
-df_1 <- unique(df_1)
-df_1 <- df_1 %>% distinct(probabilites,.keep_all = TRUE) ##single repeated pairwise comparisons for sci
-user_loc <- df_1 %>% distinct(user_loc)
+
+ZIP <- read.table("zcta_zcta_shard1.tsv", header=T, sep="\t")
+ZC <- read.csv("zip_code_database.csv")
+
 ```
 
 ```{r}
-library(zipcodeR)
-df_1 <- df_1 %>% mutate('distance' = zip_distance(df_1$user_loc, df_1$fr_loc))
+
+#PA zip code from 15001 to 19612
+ZIP_PA <- ZIP %>% 
+  filter(user_loc %in% 15001:19612 & fr_loc %in% 15001:19614) %>%
+  distinct(scaled_sci,.keep_all = TRUE)
 
 ```
 
-
-Generating weights for  1256 zipcodes and merging it in a data frame.
 ```{r}
-dim(user_loc)
-fr_loc <- df_1 %>% distinct(fr_loc)
-wt <- rnorm(1256,0.13,1)
-q_i <- data.frame(fr_loc,wt)
+
+#Calculate distance
+ZIP_PA_DIS <- ZIP_PA %>% 
+  mutate(zip_distance(user_loc, fr_loc)) %>%
+  select(user_loc,fr_loc,scaled_sci,distance)
+
 ```
 
-Further to create a weighted probabilities scaled by SCI and the weights of friend location we create a new data frame and mutate it with weighted SCI. 
 ```{r}
-df_s <- merge(df_1,q_i,by="fr_loc")
-df_s <- df_s %>% mutate(wt_sci=probabilites*wt) %>% filter(scaled_sci != 1)
+
+#Plot sci vs. distance
+ggplot(ZIP_PA_DIS,aes(distance,scaled_sci)) +
+  geom_jitter(height = 2, width = 2)
+
 ```
-Now let's do some plotting of distance with wt_sci. 
+
 ```{r}
-plot(df_s$distance$distance, df_s$wt_sci)
-plot(df_s$distance$distance, df_s$wt_sci, xlim = c(0, 30))
+#Add Counties to the data frame
+
+ZC1 <- plyr::rename(ZC, c('zip'='user_loc','county'='county_user'))
+ZC2 <- plyr::rename(ZC, c('zip'='fr_loc','county'='county_fr'))
+
+ZC1 <- ZC1 %>%
+  select(user_loc,county_user)
+  
+ZC2 <- ZC2 %>%
+  select(fr_loc,county_fr)
+
+ZIP_PA_DIS <- merge(ZIP_PA_DIS,ZC1, by = 'user_loc')
+ZIP_PA_DIS <- merge(ZIP_PA_DIS,ZC2, by = 'fr_loc')
+
+
+```
+
+```{r}
+# Add Urban/Rural classifications to counties
+
+u_r <- read.csv("urban_rural.csv")
+
+ZIP_PA_DIS <- merge(ZIP_PA_DIS,u_r, by.x = 'county_user', by.y = 'County')
+ZIP_PA_DIS <- merge(ZIP_PA_DIS,u_r, by.x = 'county_fr', by.y = 'County')
+
+ZIP_PA_DIS <- plyr::rename(ZIP_PA_DIS, c('U_R.x'='ur_user','U_R.y'='ur_fr'))
+
+```
+
+```{r}
+#Categorize Urban and Rural as 1 and -1 respectively
+ZIP_PA_DIS$ur_user[ZIP_PA_DIS$ur_user=="Rural"] = -1
+ZIP_PA_DIS$ur_user[ZIP_PA_DIS$ur_user=="Urban"] = 1
+ZIP_PA_DIS$ur_fr[ZIP_PA_DIS$ur_fr=="Rural"] = -1
+ZIP_PA_DIS$ur_fr[ZIP_PA_DIS$ur_fr=="Urban"] = 1
+
+ZIP_PA_DIS$ur_user <- as.numeric(ZIP_PA_DIS$ur_user)
+ZIP_PA_DIS$ur_fr <- as.numeric(ZIP_PA_DIS$ur_fr)
+
+#Create correlation column that tells us if two counties are both rural (-2), both 
+ZIP_PA_DIS <- ZIP_PA_DIS %>%
+  mutate('correlation' = ur_user + ur_fr)
+
+ZIP_PA_DIS$correlation <- as.factor(ZIP_PA_DIS$correlation)
+
+```
+
+```{r}
+
+ggplot(ZIP_PA_DIS, aes( group = correlation , y = log(scaled_sci))) +
+  geom_boxplot()
+
+#t.test(ZIP_PA_DIS$scaled_sci ~ ZIP_PA_DIS$correlation)
+
 ```
 ```{r}
 # Download USA Income Tax Data by Zip code here: https://www.kaggle.com/datasets/wpncrh/zip-code-income-tax-data-2014?resource=download
@@ -109,10 +164,12 @@ cor(df_n1_simplified[3:10])
 data <- df_n1_simplified[3:10] 
 #```
 Now we will import social determinant of health data from: https://www.ahrq.gov/sdoh/data-analytics/sdoh-data.html. We will use 2020 data since the SCI data is from 2020.
+
 ```{r}
 library(readxl)
 df_sdoh<- read_excel("SDOH_2020_ZIPCODE_1_0.xlsx", sheet = 'Data')
 ```
+
 ```{r}
 df_sdoh_pa <- df_sdoh %>% filter(STATE == 'Pennsylvania')
 ```
@@ -121,16 +178,21 @@ After considering each possible predictor, we have selected predictors that seem
 #df_sdoh_pa_selected <- df_sdoh_pa %>% select(3, 36, 37, 38, 41, 48, 53, 55, 56, 62, 81, 85, 91, 92, 96, 103, 104, 120, 121, 125, 129, 134, 136, 162, 181, 193, 194, 199, 200, 201, 202, 203, 204, 209, 216, 227, 230, 231, 240, 241, 245, 247, 249, 250, 254, 264, 265, 279, 282, 283, 284, 285, 286, 288, 289, 290, 291, 292, 299, 315, 318, 319)
 
 df_sdoh_pa_selected <- df_sdoh_pa %>% select(3,10, 37, 41, 53, 55, 56, 62, 81, 85, 91, 92, 96, 103, 104, 120, 121, 134, 136, 162, 181, 216, 227, 230, 231, 247, 250, 254, 264, 265, 282, 283, 284, 289, 291, 292, 315, 318)
+df_s <- ZIP_PA_DIS
 df_s <- df_s[order(as.numeric(rownames(df_s))),,drop=FALSE]
 df_s$Count <- (1:nrow(df_s))
 df_sdoh_sci_fr <- merge(df_s, df_sdoh_pa_selected, by.x = 'fr_loc', by.y = 'ZIPCODE')
-df_sdoh_sci_fr <- df_sdoh_sci_fr[order(as.numeric(rownames(df_sdoh_sci_fr))),,drop=FALSE]
+#df_sdoh_sci_fr <- df_sdoh_sci_fr%>% sort('Count', decreasing =)
 df_sdoh_sci_user <- merge(df_s, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE')
-df_sdoh_sci_user <- df_sdoh_sci_user[order(df_sdoh_sci_user$Count),,drop=FALSE]
-df_full <- abs(df_sdoh_sci_fr[8:45] - df_sdoh_sci_user[ 8:45])
+df_sdoh_sci_user <-df_sdoh_sci_user[order(df_sdoh_sci_user$Count),,drop=FALSE]
+df_sdoh_sci_fr <-df_sdoh_sci_fr[order(df_sdoh_sci_fr$Count),,drop=FALSE]
+df_sdoh_sci_user
+df_full<- abs(df_sdoh_sci_fr[10:47] - df_sdoh_sci_user[ 10:47])
+df_s <- df_s[order(df_s$Count),,drop=FALSE]
 
 #Add respective data from sci data frame
-df_full$distance <- df_s$distance$distance
+df_full$distance <- df_s$distance
+df_full$urbrur <- df_s$correlation
 #Take log of scaled_sci, from looking at the graphs of data and then the affects on analysis we decided to transform the scaled_sci
 df_full$scaled_sci <- log(df_s$scaled_sci)
 df_full$fr_loc <- df_s$fr_loc
@@ -141,16 +203,16 @@ df_full$user_loc <- df_s$user_loc
 ```{r}
 #Clean the data a little: Drop NAs. Omit any rows with distance = 0. These are sci pairs within the same zipcode, and won't be able to be predicted from differences. This analysis will need to be done separately. 
 df_full <- na.omit(df_full)
-
-#Let's normalize the data
+df_full <- df_full %>% filter(distance > 0)
 df_normalized <- df_full
+#Let's normalize the data
 for (i in 2:39){
   df_normalized[,i]<-((df_full[,i] - min(df_full[,i]))/((max(df_full[,i])-min(df_full[,i]))))
 }
 
 #Let's look a little at the correlations before digging in for further analysis
 cor(df_normalized$scaled_sci, df_normalized[2:39])
-data <- df_normalized[2:40] %>% filter(distance > 0)
+data <- df_normalized[2:41]
 ```
 There is a moderately strong negative correlation between distance and sci_scaled. None of the other variables have strong correlations but a few of them have some weak correlations (acs_pct_publ_transit_zc, acs_tot_pop_us_above1_zc, etc.)
 
@@ -186,12 +248,12 @@ Full linear regression leads to an MSE of 1.068526.
 Now we will try forward selection to find the best multiple linear regression model.
 ```{r, warning = FALSE}
 #Fit Models
-regfit.fwd <- regsubsets (scaled_sci ~ ., data = train, nvmax = 38 , method = "forward")
+regfit.fwd <- regsubsets (scaled_sci ~ ., data = train, nvmax = 40 , method = "forward")
 test.mat <- model.matrix(scaled_sci ~., data = test)
 
 #Calculate MSE for each model size
-val.errors <- rep (NA , 38)
-for (i in 1:38) {
+val.errors <- rep (NA , 40)
+for (i in 1:40) {
   coefi <- coef ( regfit.fwd , id = i)
   pred <- test.mat [, names ( coefi )] %*% coefi
   val.errors [ i] <- mean (( test$scaled_sci - pred ) ^2)
@@ -206,22 +268,24 @@ MSE.Forward
 #Add MSE and Name to lists
 MSE_All <- c(MSE_All, MSE.Forward)
 MSE_Name <- c(MSE_Name, 'Fwd Select')
+names(coef(regfit.fwd, 35))
 ```
-35 predictors minimize the MSE to 1.06489
+35 predictors minimize the MSE to 1.032774
 
 Let's look more closely at this model:
 
 ```{r}
-fwd_select_data <- subset(data, select = -c(ACS_PCT_BLACK_ZC, ACS_PER_CAPITA_INC_ZC, ACS_PCT_COLLEGE_ASSOCIATE_DGR_ZC))
+fwd_select_data <- subset(data, select = -c(ACS_PCT_FOREIGN_BORN_ZC, ACS_PCT_HH_LIMIT_ENGLISH_ZC, ACS_PCT_HH_SMARTPHONE_ZC, ACS_PCT_HH_NO_INTERNET_ZC, ACS_PCT_HH_NO_INTERNET_ZC))
 fwd_train <- fwd_select_data[train_index,]
 fwd_test <- fwd_select_data[test_index,]
-fwd.fit <- lm(scaled_sci~. , data = fwd_train)
+fwd.fit <- lm(scaled_sci~ . , data = fwd_train)
 predict <- predict.lm(fwd.fit, newdata= fwd_test)
 summary(fwd.fit)
 ```
-The adjusted R-squared is .6144. In context, this tells us we are able to explain about 61% of the variability of log(scaled_sci) with our predictors. 
-Next we will run Ridge Regression to see if we can decrease the MSE. Looking at the estimates of the coefficients, distance seems by far to explain the greatest variability. The other variables contributing most to the model are ACS_PCT_WHITE_ZC, ACS_TOT_POP_US_ABOVE1_ZC, and ACS_PCT_PUBL_TRANSIT_ZC.
+The adjusted R-squared is .6282. In context, this tells us we are able to explain about 63% of the variability of log(scaled_sci) with our predictors.
+Looking at the estimates of the coefficients, distance seems by far to explain the greatest variability. The other variables contributing most to the model are ACS_PCT_WHITE_ZC and ACS_TOT_POP_US_ABOVE1_ZC.
 
+Next we will run Ridge Regression to see if we can decrease the MSE.
 ```{r}
 #Format data and grid to prep for Ridge Regression
 x <- model.matrix(scaled_sci~., data)[,-1]
@@ -251,7 +315,7 @@ MSE.ridge
 MSE_All <- c(MSE_All, MSE.ridge)
 MSE_Name <- c(MSE_Name, 'Ridge')
 ```
-The ridge MSE is 1.076508, which is actually slightly higher than our forward selection model.
+The ridge MSE is 1.040158, which is actually slightly higher than our forward selection model.
 
 Next we will run Lasso
 ```{r}
@@ -281,13 +345,15 @@ MSE.lasso
 MSE_All <- c(MSE_All, MSE.lasso)
 MSE_Name <- c(MSE_Name, 'Lasso')
 ```
-The MSE with Lasso is slightly higher than the MSE we got from forward selection: 1.06489.
+The MSE with Lasso is slightly higher than the MSE we got from forward selection: 1.06489 vs. 1.032774.
+
+***ADD LASSO AND RIDGE FOR SELECTED PREDICTORS ***
 
 Next we will create a tree
 ```{r, warning = FALSE}
 set.seed(77)
 #Build and plot the tree
-data_tree <- df_full[2:40] %>% filter(distance > 0)
+data_tree <- df_full[2:41] %>% filter(distance > 0)
 train_tree <- data_tree[train_index,]
 test_tree <- data_tree[test_index,]
 tree <- tree( scaled_sci ~ ., data_tree, subset = train_index )
@@ -304,7 +370,7 @@ MSE.tree
 MSE_All <- c(MSE_All, MSE.tree)
 MSE_Name <- c(MSE_Name, 'Full Tree')
 ```
-The MSE of the full tree is .8495738, the lowest MSE yet.
+The MSE of the full tree is 0.782236, the lowest MSE yet.
 
 We are able to improve the model from before, just using distance and ACS_PCT_PUBL_TRANSIT_ZC. 
 
@@ -314,7 +380,7 @@ Let's use cross validation to see if we should prune the tree
 cv.tree <- cv.tree(tree)
 plot(cv.tree$size, cv.tree$dev, type = 'b')
 ```
-It does not seem as though pruning the tree will improve the model, so we can stick with what we have so far. 
+The unpruned tree  seems to minimize the MSE, so we will stick with it. 
 
 Although we have found the decision tree works bests, let's look at a graph of all the MSEs of all of the models we tried.
 ```{r}
@@ -323,20 +389,21 @@ color <- c(rep('Red', 4), 'Green')
 MSE_All
 barplot(MSE_All, names.arg = MSE_Name, las = 2, cex.names = .7, col = color, ylab = 'MSE', xlab = 'Model' )
 ```
+
 We also need to investigate what causes variability in sci scores within one zip code.
 ```{r}
-df_same_zip <- df_s %>% filter(distance$distance == 0)
+df_same_zip <- df_s %>% filter(distance == 0)
 df_same_zip_merged <- merge(df_same_zip, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE')
-same_zip_data <- subset(df_same_zip_merged, select = -c(user_loc, fr_loc, distance, Count, probabilites, wt, wt_sci))
+same_zip_data <- subset(df_same_zip_merged, select = -c(user_loc, fr_loc, distance, Count, county_fr, county_user, ur_fr, correlation))
 same_zip_data <- na.omit(same_zip_data)
 
 #Let's normalize the data
 df_normalized_same <- same_zip_data
-for (i in 2:38){
+for (i in 3:39){
   df_normalized_same[,i]<-((same_zip_data[,i] - min(same_zip_data[,i]))/((max(same_zip_data[,i])-min(same_zip_data[,i]))))
 }
 same_zip_data <- df_normalized_same
-cor(same_zip_data$scaled_sci, same_zip_data[2:38])
+cor(same_zip_data$scaled_sci, same_zip_data[3:39])
 ```
 From the below plot, we can see that it might be of worth to take the log of sci. 
 
@@ -345,7 +412,7 @@ plot(same_zip_data$scaled_sci, same_zip_data$ACS_PCT_HH_SMARTPHONE_ZC)
 same_zip_data$scaled_sci <- log(same_zip_data$scaled_sci)
 
 plot(same_zip_data$scaled_sci, same_zip_data$ACS_PCT_HH_SMARTPHONE_ZC)
-cor(same_zip_data$scaled_sci, same_zip_data[2:38])
+cor(same_zip_data$scaled_sci, same_zip_data[3:39])
 ```
 Most of the correlations have increased, which should help us with our model. 
 
@@ -375,8 +442,9 @@ MSE.Full.MultiLin_same
 #Create empty MSE vector and empty vector names for the MSE
 MSE_All_Same <- c(MSE.Full.MultiLin_same)
 MSE_Name_Same <- c('Full MLR')
+summary(lm.fit_same)
 ```
-Our MSE for the multiple linear regression is .362492
+Our MSE for the multiple linear regression is .0008674427
 
 Now we will try forward selection to find the best multiple linear regression model.
 ```{r, warning = FALSE}
@@ -403,8 +471,9 @@ MSE.Forward_same
 MSE_All_Same <- c(MSE_All_Same, MSE.Forward_same)
 MSE_Name_Same <- c(MSE_Name_Same, 'Fwd Select')
 ```
-9 predictors minimize our MSE to .3447035.
+20 predictors minimize our MSE to .0008530994.
 
+***Update to reflect new model***
 Let's look more closely at this model
 ```{r}
 fwd_select_data_same <- subset(same_zip_data, select = c(scaled_sci, ACS_TOT_POP_US_ABOVE1_ZC, ACS_PCT_FOREIGN_BORN_ZC, ACS_PCT_HISPANIC_ZC, ACS_PCT_WHITE_ZC, ACS_PCT_HH_SMARTPHONE_ZC, ACS_PCT_HH_CELLULAR_ZC, ACS_PCT_HH_FOOD_STMP_BLW_POV_ZC, ACS_PCT_BACHELOR_DGR_ZC, ACS_PCT_HU_NO_VEH_ZC))
@@ -446,7 +515,7 @@ MSE.ridge_same
 MSE_All_Same <- c(MSE_All_Same, MSE.ridge_same)
 MSE_Name_Same <- c(MSE_Name_Same, 'Ridge')
 ```
-The ridge MSE is .3546, which is actually slightly higher than our forward selection model.
+The ridge MSE is 0.0008384644, which is actually slightly higher than our forward selection model.
 
 Next we will run Lasso
 ```{r}
@@ -476,7 +545,7 @@ MSE.lasso_same
 MSE_All_Same <- c(MSE_All_Same, MSE.lasso_same)
 MSE_Name_Same <- c(MSE_Name_Same, 'Lasso')
 ```
-The MSE with Lasso is slightly lower than the MSE we got from forward selection: .342968 vs .3447035.
+The MSE with Lasso is slightly lower than the MSE we got from forward selection: 0.0008187119
 
 Next we will create a tree
 ```{r, warning = FALSE}
