@@ -340,7 +340,6 @@ cor(same_zip_data$scaled_sci, same_zip_data[2:38])
 ```
 From the below plot, we can see that it might be of worth to take the log of sci. 
 
-***Document variables meta data, mobility based sci- criterion**
 ```{r}
 plot(same_zip_data$scaled_sci, same_zip_data$ACS_PCT_HH_SMARTPHONE_ZC)
 same_zip_data$scaled_sci <- log(same_zip_data$scaled_sci)
@@ -375,7 +374,7 @@ MSE.Full.MultiLin_same
 
 #Create empty MSE vector and empty vector names for the MSE
 MSE_All_Same <- c(MSE.Full.MultiLin_same)
-MSE_Name_Same <- c('Full MLR Same Zip')
+MSE_Name_Same <- c('Full MLR')
 ```
 Our MSE for the multiple linear regression is .362492
 
@@ -402,7 +401,7 @@ MSE.Forward_same
 
 #Add MSE and Name to lists
 MSE_All_Same <- c(MSE_All_Same, MSE.Forward_same)
-MSE_Name_Same <- c(MSE_Name_Same, 'Fwd Select Same')
+MSE_Name_Same <- c(MSE_Name_Same, 'Fwd Select')
 ```
 9 predictors minimize our MSE to .3447035.
 
@@ -445,7 +444,7 @@ MSE.ridge_same
 
 #Add MSE and Name to lists
 MSE_All_Same <- c(MSE_All_Same, MSE.ridge_same)
-MSE_Name_Same <- c(MSE_Name_Same, 'Ridge Same')
+MSE_Name_Same <- c(MSE_Name_Same, 'Ridge')
 ```
 The ridge MSE is .3546, which is actually slightly higher than our forward selection model.
 
@@ -474,7 +473,7 @@ lasso.coef
 MSE.lasso_same
 
 #Add MSE and Name to lists
-MSE_All_Same <- c(MSE_All_Same, MSE.lasso)
+MSE_All_Same <- c(MSE_All_Same, MSE.lasso_same)
 MSE_Name_Same <- c(MSE_Name_Same, 'Lasso')
 ```
 The MSE with Lasso is slightly lower than the MSE we got from forward selection: .342968 vs .3447035.
@@ -492,9 +491,18 @@ text(tree_same, pretty = 0, cex = .5)
 tree.pred_same <- predict(tree_same, test_same)
 MSE.tree_same <- mean((tree.pred_same - test_same$scaled_sci)^2)
 MSE.tree_same
+```
 
+```{r}
 #Add MSE and Name to lists
 MSE_All_Same <- c(MSE_All_Same, MSE.tree)
 MSE_Name_Same <- c(MSE_Name_Same, 'Full Tree')
 ```
 The MSE is higher for the decision tree than it is for Lasso or forward selection.
+
+Although we have found the decision tree works bests, let's look at a graph of all the MSEs of all of the models we tried.
+```{r}
+plot(MSE_All_Same)
+color <- c('Red', 'Green', rep('Red', 3))
+barplot(MSE_All_Same, names.arg = MSE_Name_Same, las = 2, cex.names = .7, col = color, ylab = 'MSE within Zipcodes', xlab = 'Model' )
+```
