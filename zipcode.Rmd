@@ -271,7 +271,7 @@ MSE.ridge
 MSE_All <- c(MSE_All, MSE.ridge)
 MSE_Name <- c(MSE_Name, 'Ridge')
 ```
-The ridge MSE is 1.040158, which is actually slightly higher than our forward selection model.
+The ridge MSE is 1.040158, which is actually slightly higher than our forward selection model (1.032774).
 
 
 Next we will run Lasso
@@ -302,7 +302,7 @@ MSE.lasso
 MSE_All <- c(MSE_All, MSE.lasso)
 MSE_Name <- c(MSE_Name, 'Lasso')
 ```
-The MSE with Lasso is slightly higher than the MSE we got from forward selection: 1.06489 vs. 1.032774.
+The MSE with Lasso is slightly higher than the MSE we got from forward selection: 1.032842 vs. 1.032774.
 
 
 
@@ -336,6 +336,9 @@ MSE.ridge_fwd
 MSE_All <- c(MSE_All, MSE.ridge)
 MSE_Name <- c(MSE_Name, 'Ridge FWD')
 ```
+
+The MSE is still larger than that from forward selection (1.040132 vs 1.032774)
+
 Next we will run Lasso on the limited variable list.
 
 ```{r}
@@ -392,7 +395,7 @@ MSE_Name <- c(MSE_Name, 'Full Tree')
 ```
 The MSE of the full tree is 0.782236, the lowest MSE yet.
 
-We are able to improve the model from before, just using distance and ACS_PCT_PUBL_TRANSIT_ZC. 
+We are able to improve the model from before, just using distance and urban/rural.You can predict SCI on this tree by using distance and then classifying by urban/rural if your distance is less than 43.575. We are getting a slightly lower prediction value for when both counties are urban vs. when they are not urban. 
 
 Let's use cross validation to see if we should prune the tree
 ```{r, warning = FALSE}
@@ -411,7 +414,7 @@ MSE_All
 barplot(MSE_All, names.arg = MSE_Name, las = 2, cex.names = .7, col = color, ylab = 'MSE', xlab = 'Model' )
 ```
 
-You can see from the graph above that decision tree has the lowest MSE. This suggests that out of all of our models, the tree is the best model and explains the most variability. This model should be better than the model selected through forward selection, suggesting that the tree explains more than 62.82% of the variability in log(scaled_sci). The tree model only uses distance and ACS_PCT_PUBL_TRANSIT_ZC. Since this model only has seven nodes, it is relatively intuitive to follow and easy to find the predicted log(scaled_sci) for a new piece of data.
+You can see from the graph above that decision tree has the lowest MSE. This suggests that out of all of our models, the tree is the best model and explains the most variability. This model should be better than the model selected through forward selection, suggesting that the tree explains more than 62.82% of the variability in log(scaled_sci). The tree model only uses distance and urban/rural classification. Since this model only has seven nodes, it is relatively intuitive to follow and easy to find the predicted log(scaled_sci) for a new piece of data.
 
 
 
@@ -470,7 +473,7 @@ MSE_All_Same <- c(MSE.Full.MultiLin_same)
 MSE_Name_Same <- c('Full MLR')
 summary(lm.fit_same)
 ```
-Our MSE for the multiple linear regression is .0008674427
+Our MSE for the multiple linear regression is 0.2786184
 
 Now we will try forward selection to find the best multiple linear regression model.
 ```{r, warning = FALSE}
@@ -511,7 +514,7 @@ summary(fwd.fit_same)
 ```
 With this model we have a multiple r squared of .7957 and an adjusted R-squared of .7918, meaning we are able to explain about 79% of the variability in log(scaled_sci) with the 19 above predictors. Some of the variables that contribute to the model the most include: ur_user, ACS_TOT_POP_US_ABOVE1_ZC, ACS_PCT_HISPANIC_ZC and ACS_PCT_BACHELOR_DGR_ZC.
 
-Next we will run Ridge Regression on the same zipcodes to see if we can decrease the MSE
+Next we will run Ridge Regression on the same zip codes to see if we can decrease the MSE
 ```{r}
 #Format data and grid to prep for Ridge Regression
 x <- model.matrix(scaled_sci~., same_zip_data)[,-1]
@@ -650,7 +653,7 @@ MSE_All_Same <- c(MSE_All_Same, MSE.tree_same)
 MSE_Name_Same <- c(MSE_Name_Same, 'Full Tree')
 ```
 
-Although we have found the decision tree works bests, let's look at a graph of all the MSEs of all of the models we tried.
+Let's look at a graph of all the MSEs of all of the models we tried.
 ```{r}
 plot(MSE_All_Same)
 color <- c(rep('Red', 3), 'Green', rep('Red', 4))
