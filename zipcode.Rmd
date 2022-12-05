@@ -1,8 +1,10 @@
 ---
 title: "Social Proximity Zipcode"
-author: 
-date: 
-output: html_document
+author: "null"
+date: "null"
+output:
+  html_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -13,9 +15,8 @@ To do:
 ***add maps*** - ask Kushagra **connect if sci > threshold** plot map with thickness of lines being the sci (thicker = higher sci)
 ***provide connectivity for census tract*** - Zitao and Yanrong **produce sci for census tract** **weighting by proportion of zipcode in a census tract**
 **create meta data** - Erin
-** put in jupyter notebook**
-**combine rural/urban with this analysis**
-**clean it up**
+***put in jupyter notebook*** 
+***clean it up***
 
 Social Networks can be a significant factor in understanding the dynamics of various aspects of different fields such as social,economical and public health. In order to substantiate the intensity of social network between individuals Bailey et al proposed a relative frequency of Friendship links between different geographical unit called as Social Connectedness Index. Due to the nature of its relative frequency a comparison between the intensity of social ties across different locations can now be possible. Further Kulcher et al proposed another measure understanding the social influence of alters on ego called social proximity. This markdown file is a guide for other researchers who would want to make use of Social Proximity in there research.
 
@@ -30,8 +31,9 @@ library(pls)
 library(leaps)
 library(class)
 library(tree)
-
+library(readxl)
 ```
+
 ```{r}
 
 ZIP <- read.table("zcta_zcta_shard1.tsv", header=T, sep="\t")
@@ -118,55 +120,11 @@ ZIP_PA_DIS$correlation <- as.factor(ZIP_PA_DIS$correlation)
 ggplot(ZIP_PA_DIS, aes( group = correlation , y = log(scaled_sci))) +
   geom_boxplot()
 
-#t.test(ZIP_PA_DIS$scaled_sci ~ ZIP_PA_DIS$correlation)
-
-```
-```{r}
-# Download USA Income Tax Data by Zip code here: https://www.kaggle.com/datasets/wpncrh/zip-code-income-tax-data-2014?resource=download
-#df_taxes <- read_csv ('14zpallagi.csv')
 ```
 
-#```{r}
-df_dep <- df_taxes %>% filter(STATE == 'PA')%>% select(zipcode, agi_stub, NUMDEP) %>% pivot_wider(names_from = c( "agi_stub"), values_from = c("NUMDEP"))
-df_dep_fr<- rename(df_dep, c('fr_loc_dep_1' = '1', 'fr_loc_dep_2' = '2', 'fr_loc_dep_3' = '3', 'fr_loc_dep_4'= '4', 'fr_loc_dep_5'= '5', 'fr_loc_dep_6'= '6' ))
-df_sci_dep <- merge(df_s, df_dep_fr, by.x = 'fr_loc', by.y = 'zipcode')
-df_dep_user<- rename(df_dep, c('user_loc_dep_1' = '1', 'user_loc_dep_2' = '2', 'user_loc_dep_3' = '3', 'user_loc_dep_4'= '4', 'user_loc_dep_5'= '5', 'user_loc_dep_6'= '6'))
-df_sci_dep <- merge(df_sci_dep, df_dep_user, by.x = 'user_loc', by.y = 'zipcode')
-#```
-
-#```{r}
-df_sci_dep <- df_sci_dep %>% mutate('diff_dep_1' = user_loc_dep_1 - fr_loc_dep_1)%>% mutate('diff_dep_2' = user_loc_dep_2 - fr_loc_dep_2)%>% mutate('diff_dep_3' = user_loc_dep_3 - fr_loc_dep_3)%>% mutate('diff_dep_4' = user_loc_dep_4 - fr_loc_dep_4)%>% mutate('diff_dep_5' = user_loc_dep_5 - fr_loc_dep_5)%>% mutate('diff_dep_6' = user_loc_dep_6 - fr_loc_dep_6)
-df_sci_dep$distance_btwn <- df_sci_dep$distance$distance
-df_sci_dep_simplified <- df_sci_dep %>% select(user_loc, fr_loc, wt_sci, distance_btwn, diff_dep_1, diff_dep_2, diff_dep_3, diff_dep_4, diff_dep_5, diff_dep_6)
-cor(df_sci_dep_simplified[3:10])
-data <- df_sci_dep_simplified[3:10] 
-#```
-
-#```{r}
-tax_analysis <- function(variable){
-  df_var <- df_taxes %>% filter(STATE == 'PA')%>% select(zipcode, agi_stub, variable) %>% pivot_wider(names_from = c( "agi_stub"), values_from = c(variable))
-  df_var_fr<- rename(df_var, c('fr_loc_var_1' = '1','fr_loc_var_2' = '2', 'fr_loc_var_3' = '3', 'fr_loc_var_4'= '4', 'fr_loc_var_5'= '5', 'fr_loc_var_6'= '6' ))
-  df_sci_var <- merge(df_s, df_var_fr, by.x = 'fr_loc', by.y = 'zipcode')
-  df_var_user<- rename(df_var, c('user_loc_var_1' = '1', 'user_loc_var_2' = '2', 'user_loc_var_3' = '3', 'user_loc_var_4'= '4', 'user_loc_var_5'= '5', 'user_loc_var_6'= '6'))
-  df_sci_var <- merge(df_sci_var, df_var_user, by.x = 'user_loc', by.y = 'zipcode')
-  
-  df_sci_var <- df_sci_var %>% mutate('diff_var_1' = user_loc_var_1 - fr_loc_var_1)%>% mutate('diff_var_2' = user_loc_var_2 - fr_loc_var_2)%>% mutate('diff_var_3' = user_loc_var_3 - fr_loc_var_3)%>% mutate('diff_var_4' = user_loc_var_4 - fr_loc_var_4)%>% mutate('diff_var_5' = user_loc_var_5 - fr_loc_var_5)%>% mutate('diff_var_6' = user_loc_var_6 - fr_loc_var_6)
-  df_sci_var$distance_btwn <- df_sci_var$distance$distance
-  return(df_sci_var)
-}
-df_n1<- tax_analysis('TCE')
-#```
-#```{r}
-lm.fit <- lm(wt_sci~., data = data)
-summary(lm.fit)
-df_n1_simplified <- df_n1 %>% select(user_loc, fr_loc, wt_sci, distance_btwn, diff_var_1, diff_var_2, diff_var_3, diff_var_4, diff_var_5, diff_var_6)
-cor(df_n1_simplified[3:10])
-data <- df_n1_simplified[3:10] 
-#```
 Now we will import social determinant of health data from: https://www.ahrq.gov/sdoh/data-analytics/sdoh-data.html. We will use 2020 data since the SCI data is from 2020.
 
 ```{r}
-library(readxl)
 df_sdoh<- read_excel("SDOH_2020_ZIPCODE_1_0.xlsx", sheet = 'Data')
 ```
 
@@ -175,18 +133,14 @@ df_sdoh_pa <- df_sdoh %>% filter(STATE == 'Pennsylvania')
 ```
 After considering each possible predictor, we have selected predictors that seem like they might have helpful information regarding sci.
 ```{r}
-#df_sdoh_pa_selected <- df_sdoh_pa %>% select(3, 36, 37, 38, 41, 48, 53, 55, 56, 62, 81, 85, 91, 92, 96, 103, 104, 120, 121, 125, 129, 134, 136, 162, 181, 193, 194, 199, 200, 201, 202, 203, 204, 209, 216, 227, 230, 231, 240, 241, 245, 247, 249, 250, 254, 264, 265, 279, 282, 283, 284, 285, 286, 288, 289, 290, 291, 292, 299, 315, 318, 319)
-
 df_sdoh_pa_selected <- df_sdoh_pa %>% select(3,10, 37, 41, 53, 55, 56, 62, 81, 85, 91, 92, 96, 103, 104, 120, 121, 134, 136, 162, 181, 216, 227, 230, 231, 247, 250, 254, 264, 265, 282, 283, 284, 289, 291, 292, 315, 318)
 df_s <- ZIP_PA_DIS
 df_s <- df_s[order(as.numeric(rownames(df_s))),,drop=FALSE]
 df_s$Count <- (1:nrow(df_s))
 df_sdoh_sci_fr <- merge(df_s, df_sdoh_pa_selected, by.x = 'fr_loc', by.y = 'ZIPCODE')
-#df_sdoh_sci_fr <- df_sdoh_sci_fr%>% sort('Count', decreasing =)
 df_sdoh_sci_user <- merge(df_s, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE')
 df_sdoh_sci_user <-df_sdoh_sci_user[order(df_sdoh_sci_user$Count),,drop=FALSE]
 df_sdoh_sci_fr <-df_sdoh_sci_fr[order(df_sdoh_sci_fr$Count),,drop=FALSE]
-df_sdoh_sci_user
 df_full<- abs(df_sdoh_sci_fr[10:47] - df_sdoh_sci_user[ 10:47])
 df_s <- df_s[order(df_s$Count),,drop=FALSE]
 
@@ -275,6 +229,7 @@ names(coef(regfit.fwd, 35))
 Let's look more closely at this model:
 
 ```{r}
+fwd_vars<- which(summary(regfit.fwd, which.min(val.errors))$which[which.min(val.errors),])
 fwd_select_data <- subset(data, select = -c(ACS_PCT_FOREIGN_BORN_ZC, ACS_PCT_HH_LIMIT_ENGLISH_ZC, ACS_PCT_HH_SMARTPHONE_ZC, ACS_PCT_HH_NO_INTERNET_ZC, ACS_PCT_HH_NO_INTERNET_ZC))
 fwd_train <- fwd_select_data[train_index,]
 fwd_test <- fwd_select_data[test_index,]
@@ -282,6 +237,7 @@ fwd.fit <- lm(scaled_sci~ . , data = fwd_train)
 predict <- predict.lm(fwd.fit, newdata= fwd_test)
 summary(fwd.fit)
 ```
+
 The adjusted R-squared is .6282. In context, this tells us we are able to explain about 63% of the variability of log(scaled_sci) with our predictors.
 Looking at the estimates of the coefficients, distance seems by far to explain the greatest variability. The other variables contributing most to the model are ACS_PCT_WHITE_ZC and ACS_TOT_POP_US_ABOVE1_ZC.
 
@@ -317,17 +273,18 @@ MSE_Name <- c(MSE_Name, 'Ridge')
 ```
 The ridge MSE is 1.040158, which is actually slightly higher than our forward selection model.
 
+
 Next we will run Lasso
 ```{r}
 #Build the model
 lasso.mod <- glmnet(x[train_index, ], y[train_index], alpha =1, lamda = grid)
-plot(lasso.mod)
 set.seed(52)
 
 #Use cross validation to select best value of lamda
 cv.out <- cv.glmnet(x[train_index, ], y[train_index], alpha = 1)
 plot(cv.out)
 bestlam <- cv.out$lambda.min 
+bestlam
 
 #Fit predictions for test set using best value of lambda
 lasso.pred <- predict(lasso.mod, s = bestlam, newx = x[test_index, ])
@@ -347,7 +304,70 @@ MSE_Name <- c(MSE_Name, 'Lasso')
 ```
 The MSE with Lasso is slightly higher than the MSE we got from forward selection: 1.06489 vs. 1.032774.
 
-***ADD LASSO AND RIDGE FOR SELECTED PREDICTORS ***
+
+
+Next we will run Ridge Regression on only the variables selected with forward selection to see if we can decrease the MSE.
+```{r}
+#Format data and grid to prep for Ridge Regression
+x <- model.matrix(scaled_sci~., fwd_select_data)[,-1]
+y <- fwd_select_data$scaled_sci
+y.test <-y[test_index]
+grid <- 10^seq(10, -2, length = 100)
+
+#Fit the Model
+ridge.mod <- glmnet(x[train_index,], y[train_index], alpha = 0, lamda = grid, thresh = 1e-12)
+
+set.seed(30)
+
+#Use Cross validation to find best value of lambda
+cv.out <- cv.glmnet(x[train_index,], y[train_index], alpha = 0)
+plot(cv.out)
+bestlam <- cv.out$lambda.min
+bestlam
+
+#Fit predictions with best value of lambda
+ridge.pred <- predict(ridge.mod, s = bestlam, newx = x[test_index, ])
+
+#Calculate MSE
+MSE.ridge_fwd <- mean((ridge.pred - y.test)^2)
+MSE.ridge_fwd
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.ridge)
+MSE_Name <- c(MSE_Name, 'Ridge FWD')
+```
+Next we will run Lasso on the limited variable list.
+
+```{r}
+#Build the model
+lasso.mod <- glmnet(x[train_index, ], y[train_index], alpha =1, lamda = grid)
+set.seed(52)
+
+#Use cross validation to select best value of lambda
+cv.out <- cv.glmnet(x[train_index, ], y[train_index], alpha = 1)
+plot(cv.out)
+bestlam <- cv.out$lambda.min 
+bestlam
+
+#Fit predictions for test set using best value of lambda
+lasso.pred <- predict(lasso.mod, s = bestlam, newx = x[test_index, ])
+
+#Calculate MSE
+MSE.lasso_fwd <- mean((lasso.pred - y.test)^2)
+
+#Look at variables of interest
+out <-  glmnet( x, y, alpha = 1, lamda = grid)
+lasso.coef <- predict(out, type = 'coefficients', s = bestlam)[1:18,]
+lasso.coef
+MSE.lasso_fwd
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.lasso_fwd)
+MSE_Name <- c(MSE_Name, 'Lasso FWD')
+```
+The MSE is still larger than that from forward selection ( 1.032839 vs 1.032774)
+
+It is interesting to note that multiple linear regression is out performing Ridge and Lasso. However, since we are using MSE as a model selection criterion, and we are selecting lambda with cross validation, variations in the specific test set would explain these differences especially since Lasso and Ridge also appear to be performing rather similar to multiple linear regression.
 
 Next we will create a tree
 ```{r, warning = FALSE}
@@ -380,15 +400,21 @@ Let's use cross validation to see if we should prune the tree
 cv.tree <- cv.tree(tree)
 plot(cv.tree$size, cv.tree$dev, type = 'b')
 ```
+
 The unpruned tree  seems to minimize the MSE, so we will stick with it. 
 
 Although we have found the decision tree works bests, let's look at a graph of all the MSEs of all of the models we tried.
 ```{r}
 plot(MSE_All)
-color <- c(rep('Red', 4), 'Green')
+color <- c(rep('Red', 6), 'Green')
 MSE_All
 barplot(MSE_All, names.arg = MSE_Name, las = 2, cex.names = .7, col = color, ylab = 'MSE', xlab = 'Model' )
 ```
+
+You can see from the graph above that decision tree has the lowest MSE. This suggests that out of all of our models, the tree is the best model and explains the most variability. This model should be better than the model selected through forward selection, suggesting that the tree explains more than 62.82% of the variability in log(scaled_sci). The tree model only uses distance and ACS_PCT_PUBL_TRANSIT_ZC. Since this model only has seven nodes, it is relatively intuitive to follow and easy to find the predicted log(scaled_sci) for a new piece of data.
+
+
+
 
 We also need to investigate what causes variability in sci scores within one zip code.
 ```{r}
@@ -471,19 +497,19 @@ MSE.Forward_same
 MSE_All_Same <- c(MSE_All_Same, MSE.Forward_same)
 MSE_Name_Same <- c(MSE_Name_Same, 'Fwd Select')
 ```
-20 predictors minimize our MSE to .0008530994.
+19 predictors minimize our MSE to  0.2681383
 
-***Update to reflect new model***
 Let's look more closely at this model
 ```{r}
-fwd_select_data_same <- subset(same_zip_data, select = c(scaled_sci, ACS_TOT_POP_US_ABOVE1_ZC, ACS_PCT_FOREIGN_BORN_ZC, ACS_PCT_HISPANIC_ZC, ACS_PCT_WHITE_ZC, ACS_PCT_HH_SMARTPHONE_ZC, ACS_PCT_HH_CELLULAR_ZC, ACS_PCT_HH_FOOD_STMP_BLW_POV_ZC, ACS_PCT_BACHELOR_DGR_ZC, ACS_PCT_HU_NO_VEH_ZC))
+fwd_same_vars<- which(summary(regfit.fwd_same, which.min(val.errors_same))$which[which.min(val.errors_same),])
+fwd_select_data_same <- subset(same_zip_data, select = fwd_same_vars)
 fwd_train_same <- fwd_select_data_same[train_index_same,]
 fwd_test_same <- fwd_select_data_same[test_index_same,]
 fwd.fit_same <- lm(scaled_sci~. , data = fwd_train_same)
 predict <- predict.lm(fwd.fit_same, newdata= fwd_test_same)
 summary(fwd.fit_same)
 ```
-With this model we have a multiple r squared of .7539, meaning we are able to explain about 75% of the variability in log(scaled_sci) with the 9 above predictors.ACS_TOT_POP_US_ABOVE1_ZC seems to have the highest impact on our model and ACS_PCT_BACHELOR_DGR_ZC having the second highest impact. ACS_PCT_HH_SMARTPHONE_ZC seems to contribute the least out of all the variables in the model, while the other 6 variables seem to contribute at similar rates.
+With this model we have a multiple r squared of .7957 and an adjusted R-squared of .7918, meaning we are able to explain about 79% of the variability in log(scaled_sci) with the 19 above predictors. Some of the variables that contribute to the model the most include: ur_user, ACS_TOT_POP_US_ABOVE1_ZC, ACS_PCT_HISPANIC_ZC and ACS_PCT_BACHELOR_DGR_ZC.
 
 Next we will run Ridge Regression on the same zipcodes to see if we can decrease the MSE
 ```{r}
@@ -515,13 +541,11 @@ MSE.ridge_same
 MSE_All_Same <- c(MSE_All_Same, MSE.ridge_same)
 MSE_Name_Same <- c(MSE_Name_Same, 'Ridge')
 ```
-The ridge MSE is 0.0008384644, which is actually slightly higher than our forward selection model.
 
 Next we will run Lasso
 ```{r}
 #Build the model
 lasso.mod_same <- glmnet(x[train_index_same, ], y[train_index_same], alpha =1, lamda = grid)
-plot(lasso.mod_same)
 set.seed(117)
 
 #Use cross validation to select best value of lamda
@@ -545,7 +569,65 @@ MSE.lasso_same
 MSE_All_Same <- c(MSE_All_Same, MSE.lasso_same)
 MSE_Name_Same <- c(MSE_Name_Same, 'Lasso')
 ```
-The MSE with Lasso is slightly lower than the MSE we got from forward selection: 0.0008187119
+
+Next we will run Ridge Regression but only using the variables selected with forward selection.
+```{r}
+#Format data and grid to prep for Ridge Regression
+x <- model.matrix(scaled_sci~., fwd_select_data_same)[,-1]
+y <- fwd_select_data_same$scaled_sci
+y.test <-y[test_index_same]
+grid <- 10^seq(10, -2, length = 100)
+
+#Fit the Model
+ridge.mod_same <- glmnet(x[train_index_same,], y[train_index_same], alpha = 0, lamda = grid, thresh = 1e-12)
+
+set.seed(15)
+
+#Use Cross validation to find best value of lambda
+cv.out_same <- cv.glmnet(x[train_index_same,], y[train_index_same], alpha = 0)
+plot(cv.out_same)
+bestlam_same_fwd <- cv.out_same$lambda.min
+bestlam_same_fwd
+
+#Fit predictions with best value of lambda
+ridge.pred_same <- predict(ridge.mod_same, s = bestlam_same_fwd, newx = x[test_index_same, ])
+
+#Calculate MSE
+MSE.ridge_same_fwd <- mean((ridge.pred_same - y.test)^2)
+MSE.ridge_same_fwd
+
+#Add MSE and Name to lists
+MSE_All_Same <- c(MSE_All_Same, MSE.ridge_same_fwd)
+MSE_Name_Same <- c(MSE_Name_Same, 'Ridge FWD')
+```
+
+Next we will run Lasso
+```{r}
+#Build the model
+lasso.mod_same <- glmnet(x[train_index_same, ], y[train_index_same], alpha =1, lamda = grid)
+set.seed(117)
+
+#Use cross validation to select best value of lambda
+cv.out_same <- cv.glmnet(x[train_index_same, ], y[train_index_same], alpha = 1)
+plot(cv.out_same)
+bestlam_same <- cv.out_same$lambda.min 
+
+#Fit predictions for test set using best value of lambda
+lasso.pred_same <- predict(lasso.mod_same, s = bestlam_same, newx = x[test_index_same, ])
+
+#Calculate MSE
+MSE.lasso_same_fwd <- mean((lasso.pred_same - y.test)^2)
+
+#Look at variables of interest
+out <-  glmnet( x, y, alpha = 1, lamda = grid)
+lasso.coef <- predict(out, type = 'coefficients', s = bestlam)[1:18,]
+lasso.coef
+MSE.lasso_same_fwd
+
+#Add MSE and Name to lists
+MSE_All_Same <- c(MSE_All_Same, MSE.lasso_same_fwd)
+MSE_Name_Same <- c(MSE_Name_Same, 'Lasso Fwd')
+```
 
 Next we will create a tree
 ```{r, warning = FALSE}
@@ -564,14 +646,16 @@ MSE.tree_same
 
 ```{r}
 #Add MSE and Name to lists
-MSE_All_Same <- c(MSE_All_Same, MSE.tree)
+MSE_All_Same <- c(MSE_All_Same, MSE.tree_same)
 MSE_Name_Same <- c(MSE_Name_Same, 'Full Tree')
 ```
-The MSE is higher for the decision tree than it is for Lasso or forward selection.
 
 Although we have found the decision tree works bests, let's look at a graph of all the MSEs of all of the models we tried.
 ```{r}
 plot(MSE_All_Same)
-color <- c('Red', 'Green', rep('Red', 3))
+color <- c(rep('Red', 3), 'Green', rep('Red', 4))
 barplot(MSE_All_Same, names.arg = MSE_Name_Same, las = 2, cex.names = .7, col = color, ylab = 'MSE within Zipcodes', xlab = 'Model' )
+which.min(MSE_All_Same)
 ```
+
+You can see from the above graph that Lasso on all the variables has the lowest MSE and therefore explains the most variability. However, It is rather similar to the multiple linear regression model that was selected with forward selection.As such, for interpretability purposes, we might want to stick with using the forward selection model to explain variability. This model uses ur_user, ACS_TOT_POP_US_ABOVE1_ZC, ACS_PCT_MALE_ZC, ACS_PCT_FOREIGN_BORN_ZC, ACS_PCT_OTH_LANG_ZC, ACS_PCT_SPANISH_ZC, ACS_PCT_ASIAN_ZC, ACS_PCT_BLACK_ZC, ACS_PCT_HISPANIC_ZC, ACS_PCT_WHITE_ZC, ACS_PCT_HH_SMARTPHONE_ZC, ACS_PCT_HH_CELLULAR_ZC, ACS_PCT_HH_NO_INTERNET_ZC, ACS_PCT_EMPLOYED_ZC, ACS_PCT_HH_FOOD_STMP_BLW_POV_ZC, ACS_PCT_BACHELOR_DGR_ZC, ACS_PCT_DIF_STATE_ZC, ACS_PCT_DRIVE_2WORK_ZC, and ACS_PCT_HU_NO_VEH_ZC to explain approximately 79% of the variability in log(scaled_sci).
