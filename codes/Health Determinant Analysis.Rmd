@@ -1,0 +1,664 @@
+---
+title: "Social Proximity Zipcode"
+author: "null"
+date: "null"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+To do:
+
+***add maps*** - ask Kushagra **connect if sci > threshold** plot map with thickness of lines being the sci (thicker = higher sci)
+***provide connectivity for census tract*** - Zitao and Yanrong **produce sci for census tract** **weighting by proportion of zipcode in a census tract**
+**create meta data** - Erin
+***put in jupyter notebook*** 
+***clean it up***
+
+Social Networks can be a significant factor in understanding the dynamics of various aspects of different fields such as social,economical and public health. In order to substantiate the intensity of social network between individuals Bailey et al proposed a relative frequency of Friendship links between different geographical unit called as Social Connectedness Index. Due to the nature of its relative frequency a comparison between the intensity of social ties across different locations can now be possible. Further Kulcher et al proposed another measure understanding the social influence of alters on ego called social proximity. This markdown file is a guide for other researchers who would want to make use of Social Proximity in there research.
+
+```{r}
+library(tidyverse)
+library(igraph)
+library(ggplot2)
+library(geodist)
+library(zipcodeR)
+library(glmnet)
+library(pls)
+library(leaps)
+library(class)
+library(tree)
+library(readxl)
+```
+
+```{r}
+
+ZIP <- read.table("zcta_zcta_shard1.tsv", header=T, sep="\t")
+ZC <- read.csv("zip_code_database.csv")
+
+```
+
+```{r}
+
+#PA zip code from 15001 to 19612
+ZIP_PA <- ZIP %>% 
+  filter(user_loc %in% 15001:19612 & fr_loc %in% 15001:19614) %>%
+  distinct(scaled_sci,.keep_all = TRUE)
+
+```
+
+```{r}
+
+#Calculate distance
+ZIP_PA_DIS <- ZIP_PA %>% 
+  mutate(zip_distance(user_loc, fr_loc)) %>%
+  select(user_loc,fr_loc,scaled_sci,distance)
+
+```
+
+```{r}
+
+#Plot sci vs. distance
+ggplot(ZIP_PA_DIS,aes(distance,scaled_sci)) +
+  geom_jitter(height = 2, width = 2)
+
+```
+
+```{r}
+#Add Counties to the data frame
+
+ZC1 <- plyr::rename(ZC, c('zip'='user_loc','county'='county_user'))
+ZC2 <- plyr::rename(ZC, c('zip'='fr_loc','county'='county_fr'))
+
+ZC1 <- ZC1 %>%
+  select(user_loc,county_user)
+  
+ZC2 <- ZC2 %>%
+  select(fr_loc,county_fr)
+
+ZIP_PA_DIS <- merge(ZIP_PA_DIS,ZC1, by = 'user_loc')
+ZIP_PA_DIS <- merge(ZIP_PA_DIS,ZC2, by = 'fr_loc')
+
+
+```
+
+```{r}
+# Add Urban/Rural classifications to counties
+
+u_r <- read.csv("urban_rural.csv")
+
+ZIP_PA_DIS <- merge(ZIP_PA_DIS,u_r, by.x = 'county_user', by.y = 'County')
+ZIP_PA_DIS <- merge(ZIP_PA_DIS,u_r, by.x = 'county_fr', by.y = 'County')
+
+ZIP_PA_DIS <- plyr::rename(ZIP_PA_DIS, c('U_R.x'='ur_user','U_R.y'='ur_fr'))
+
+```
+
+```{r}
+#Categorize Urban and Rural as 1 and -1 respectively
+ZIP_PA_DIS$ur_user[ZIP_PA_DIS$ur_user=="Rural"] = -1
+ZIP_PA_DIS$ur_user[ZIP_PA_DIS$ur_user=="Urban"] = 1
+ZIP_PA_DIS$ur_fr[ZIP_PA_DIS$ur_fr=="Rural"] = -1
+ZIP_PA_DIS$ur_fr[ZIP_PA_DIS$ur_fr=="Urban"] = 1
+
+ZIP_PA_DIS$ur_user <- as.numeric(ZIP_PA_DIS$ur_user)
+ZIP_PA_DIS$ur_fr <- as.numeric(ZIP_PA_DIS$ur_fr)
+
+#Create correlation column that tells us if two counties are both rural (-2), both 
+ZIP_PA_DIS <- ZIP_PA_DIS %>%
+  mutate('correlation' = ur_user + ur_fr)
+
+ZIP_PA_DIS$correlation <- as.factor(ZIP_PA_DIS$correlation)
+
+```
+
+```{r}
+
+ggplot(ZIP_PA_DIS, aes( group = correlation , y = log(scaled_sci))) +
+  geom_boxplot()
+
+```
+
+Now we will import social determinant of health data from: https://www.ahrq.gov/sdoh/data-analytics/sdoh-data.html. We will use 2020 data since the SCI data is from 2020.
+
+```{r}
+df_sdoh<- read_excel("SDOH_2020_ZIPCODE_1_0.xlsx", sheet = 'Data')
+```
+
+```{r}
+df_sdoh_pa <- df_sdoh %>% filter(STATE == 'Pennsylvania')
+```
+After considering each possible predictor, we have selected predictors that seem like they might have helpful information regarding sci.
+```{r}
+df_sdoh_pa_selected <- df_sdoh_pa %>% select(3,10, 37, 41, 53, 55, 56, 62, 81, 85, 91, 92, 96, 103, 104, 120, 121, 134, 136, 162, 181, 216, 227, 230, 231, 247, 250, 254, 264, 265, 282, 283, 284, 289, 291, 292, 315, 318)
+df_s <- ZIP_PA_DIS
+df_s <- df_s[order(as.numeric(rownames(df_s))),,drop=FALSE]
+df_s$Count <- (1:nrow(df_s))
+df_sdoh_sci_fr <- merge(df_s, df_sdoh_pa_selected, by.x = 'fr_loc', by.y = 'ZIPCODE')
+df_sdoh_sci_user <- merge(df_s, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE')
+df_sdoh_sci_user <-df_sdoh_sci_user[order(df_sdoh_sci_user$Count),,drop=FALSE]
+df_sdoh_sci_fr <-df_sdoh_sci_fr[order(df_sdoh_sci_fr$Count),,drop=FALSE]
+df_full<- abs(df_sdoh_sci_fr[10:47] - df_sdoh_sci_user[ 10:47])
+df_s <- df_s[order(df_s$Count),,drop=FALSE]
+
+#Add respective data from sci data frame
+df_full$distance <- df_s$distance
+df_full$urbrur <- df_s$correlation
+#Take log of scaled_sci, from looking at the graphs of data and then the affects on analysis we decided to transform the scaled_sci
+df_full$scaled_sci <- log(df_s$scaled_sci)
+df_full$fr_loc <- df_s$fr_loc
+df_full$user_loc <- df_s$user_loc
+```
+
+
+```{r}
+#Clean the data a little: Drop NAs. Omit any rows with distance = 0. These are sci pairs within the same zipcode, and won't be able to be predicted from differences. This analysis will need to be done separately. 
+df_full <- na.omit(df_full)
+df_full <- df_full %>% filter(distance > 0)
+df_normalized <- df_full
+#Let's normalize the data
+for (i in 2:39){
+  df_normalized[,i]<-((df_full[,i] - min(df_full[,i]))/((max(df_full[,i])-min(df_full[,i]))))
+}
+
+#Let's look a little at the correlations before digging in for further analysis
+cor(df_normalized$scaled_sci, df_normalized[2:39])
+data <- df_normalized[2:41]
+```
+There is a moderately strong negative correlation between distance and sci_scaled. None of the other variables have strong correlations but a few of them have some weak correlations (acs_pct_publ_transit_zc, acs_tot_pop_us_above1_zc, etc.)
+
+
+```{r}
+set.seed(2)
+
+#Create a training and test set with an 80/20 split.
+test_index <- sample(1:nrow(data), nrow(data)/5)
+allnums<- (1:nrow(data))
+train_index<- allnums[-test_index]
+train <- data[train_index,]
+test <- data[test_index,]
+```
+Now it is time to start building models.
+Let's start by running multiple linear regression with all of the predictors. 
+Since we are using MSE as a way to compare models, we will store all of the MSEs in one MSE list as we go.
+
+```{r, warning = FALSE}
+lm.fit <- lm(scaled_sci~., data = train)
+predict <- predict.lm(lm.fit, newdata= test)
+
+#Calculate MSE for this model and add to list
+MSE.Full.MultiLin <- mean((test$scaled_sci - predict)^2)
+MSE.Full.MultiLin
+
+#Create empty MSE vector and empty vector names for the MSE
+MSE_All <- c(MSE.Full.MultiLin)
+MSE_Name <- c('Full MLR')
+```
+Full linear regression leads to an MSE of 1.068526.
+
+Now we will try forward selection to find the best multiple linear regression model.
+```{r, warning = FALSE}
+#Fit Models
+regfit.fwd <- regsubsets (scaled_sci ~ ., data = train, nvmax = 40 , method = "forward")
+test.mat <- model.matrix(scaled_sci ~., data = test)
+
+#Calculate MSE for each model size
+val.errors <- rep (NA , 40)
+for (i in 1:40) {
+  coefi <- coef ( regfit.fwd , id = i)
+  pred <- test.mat [, names ( coefi )] %*% coefi
+  val.errors [ i] <- mean (( test$scaled_sci - pred ) ^2)
+}
+val.errors
+
+#Find the model with the smallest MSE
+which.min(val.errors)
+MSE.Forward <- val.errors[which.min(val.errors)]
+MSE.Forward
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.Forward)
+MSE_Name <- c(MSE_Name, 'Fwd Select')
+names(coef(regfit.fwd, 35))
+```
+35 predictors minimize the MSE to 1.032774
+
+Let's look more closely at this model:
+
+```{r}
+fwd_vars<- which(summary(regfit.fwd, which.min(val.errors))$which[which.min(val.errors),])
+fwd_select_data <- subset(data, select = -c(ACS_PCT_FOREIGN_BORN_ZC, ACS_PCT_HH_LIMIT_ENGLISH_ZC, ACS_PCT_HH_SMARTPHONE_ZC, ACS_PCT_HH_NO_INTERNET_ZC, ACS_PCT_HH_NO_INTERNET_ZC))
+fwd_train <- fwd_select_data[train_index,]
+fwd_test <- fwd_select_data[test_index,]
+fwd.fit <- lm(scaled_sci~ . , data = fwd_train)
+predict <- predict.lm(fwd.fit, newdata= fwd_test)
+summary(fwd.fit)
+```
+
+The adjusted R-squared is .6282. In context, this tells us we are able to explain about 63% of the variability of log(scaled_sci) with our predictors.
+Looking at the estimates of the coefficients, distance seems by far to explain the greatest variability. The other variables contributing most to the model are ACS_PCT_WHITE_ZC and ACS_TOT_POP_US_ABOVE1_ZC.
+
+Next we will run Ridge Regression to see if we can decrease the MSE.
+```{r}
+#Format data and grid to prep for Ridge Regression
+x <- model.matrix(scaled_sci~., data)[,-1]
+y <- data$scaled_sci
+y.test <-y[test_index]
+grid <- 10^seq(10, -2, length = 100)
+
+#Fit the Model
+ridge.mod <- glmnet(x[train_index,], y[train_index], alpha = 0, lamda = grid, thresh = 1e-12)
+
+set.seed(30)
+
+#Use Cross validation to find best value of lambda
+cv.out <- cv.glmnet(x[train_index,], y[train_index], alpha = 0)
+plot(cv.out)
+bestlam <- cv.out$lambda.min
+bestlam
+
+#Fit predictions with best value of lambda
+ridge.pred <- predict(ridge.mod, s = bestlam, newx = x[test_index, ])
+
+#Calculate MSE
+MSE.ridge <- mean((ridge.pred - y.test)^2)
+MSE.ridge
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.ridge)
+MSE_Name <- c(MSE_Name, 'Ridge')
+```
+The ridge MSE is 1.040158, which is actually slightly higher than our forward selection model (1.032774).
+
+
+Next we will run Lasso
+```{r}
+#Build the model
+lasso.mod <- glmnet(x[train_index, ], y[train_index], alpha =1, lamda = grid)
+set.seed(52)
+
+#Use cross validation to select best value of lamda
+cv.out <- cv.glmnet(x[train_index, ], y[train_index], alpha = 1)
+plot(cv.out)
+bestlam <- cv.out$lambda.min 
+bestlam
+
+#Fit predictions for test set using best value of lambda
+lasso.pred <- predict(lasso.mod, s = bestlam, newx = x[test_index, ])
+
+#Calculate MSE
+MSE.lasso <- mean((lasso.pred - y.test)^2)
+
+#Look at variables of interest
+out <-  glmnet( x, y, alpha = 1, lamda = grid)
+lasso.coef <- predict(out, type = 'coefficients', s = bestlam)[1:18,]
+lasso.coef
+MSE.lasso
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.lasso)
+MSE_Name <- c(MSE_Name, 'Lasso')
+```
+The MSE with Lasso is slightly higher than the MSE we got from forward selection: 1.032842 vs. 1.032774.
+
+
+
+Next we will run Ridge Regression on only the variables selected with forward selection to see if we can decrease the MSE.
+```{r}
+#Format data and grid to prep for Ridge Regression
+x <- model.matrix(scaled_sci~., fwd_select_data)[,-1]
+y <- fwd_select_data$scaled_sci
+y.test <-y[test_index]
+grid <- 10^seq(10, -2, length = 100)
+
+#Fit the Model
+ridge.mod <- glmnet(x[train_index,], y[train_index], alpha = 0, lamda = grid, thresh = 1e-12)
+
+set.seed(30)
+
+#Use Cross validation to find best value of lambda
+cv.out <- cv.glmnet(x[train_index,], y[train_index], alpha = 0)
+plot(cv.out)
+bestlam <- cv.out$lambda.min
+bestlam
+
+#Fit predictions with best value of lambda
+ridge.pred <- predict(ridge.mod, s = bestlam, newx = x[test_index, ])
+
+#Calculate MSE
+MSE.ridge_fwd <- mean((ridge.pred - y.test)^2)
+MSE.ridge_fwd
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.ridge)
+MSE_Name <- c(MSE_Name, 'Ridge FWD')
+```
+
+The MSE is still larger than that from forward selection (1.040132 vs 1.032774)
+
+Next we will run Lasso on the limited variable list.
+
+```{r}
+#Build the model
+lasso.mod <- glmnet(x[train_index, ], y[train_index], alpha =1, lamda = grid)
+set.seed(52)
+
+#Use cross validation to select best value of lambda
+cv.out <- cv.glmnet(x[train_index, ], y[train_index], alpha = 1)
+plot(cv.out)
+bestlam <- cv.out$lambda.min 
+bestlam
+
+#Fit predictions for test set using best value of lambda
+lasso.pred <- predict(lasso.mod, s = bestlam, newx = x[test_index, ])
+
+#Calculate MSE
+MSE.lasso_fwd <- mean((lasso.pred - y.test)^2)
+
+#Look at variables of interest
+out <-  glmnet( x, y, alpha = 1, lamda = grid)
+lasso.coef <- predict(out, type = 'coefficients', s = bestlam)[1:18,]
+lasso.coef
+MSE.lasso_fwd
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.lasso_fwd)
+MSE_Name <- c(MSE_Name, 'Lasso FWD')
+```
+The MSE is still larger than that from forward selection ( 1.032839 vs 1.032774)
+
+It is interesting to note that multiple linear regression is out performing Ridge and Lasso. However, since we are using MSE as a model selection criterion, and we are selecting lambda with cross validation, variations in the specific test set would explain these differences especially since Lasso and Ridge also appear to be performing rather similar to multiple linear regression.
+
+Next we will create a tree
+```{r, warning = FALSE}
+set.seed(77)
+#Build and plot the tree
+data_tree <- df_full[2:41] %>% filter(distance > 0)
+train_tree <- data_tree[train_index,]
+test_tree <- data_tree[test_index,]
+tree <- tree( scaled_sci ~ ., data_tree, subset = train_index )
+plot(tree)
+summary(tree)
+text(tree, pretty = 0, cex = .5)
+
+#Make predictions and calculate MSE
+tree.pred <- predict(tree, test_tree)
+MSE.tree <- mean((tree.pred - test_tree$scaled_sci)^2)
+MSE.tree
+
+#Add MSE and Name to lists
+MSE_All <- c(MSE_All, MSE.tree)
+MSE_Name <- c(MSE_Name, 'Full Tree')
+```
+The MSE of the full tree is 0.782236, the lowest MSE yet.
+
+We are able to improve the model from before, just using distance and urban/rural.You can predict SCI on this tree by using distance and then classifying by urban/rural if your distance is less than 43.575. We are getting a slightly lower prediction value for when both counties are urban vs. when they are not urban. 
+
+Let's use cross validation to see if we should prune the tree
+```{r, warning = FALSE}
+#Run cross validation and plot to see which size is the best
+cv.tree <- cv.tree(tree)
+plot(cv.tree$size, cv.tree$dev, type = 'b')
+```
+
+The unpruned tree  seems to minimize the MSE, so we will stick with it. 
+
+Although we have found the decision tree works bests, let's look at a graph of all the MSEs of all of the models we tried.
+```{r}
+plot(MSE_All)
+color <- c(rep('Red', 6), 'Green')
+MSE_All
+barplot(MSE_All, names.arg = MSE_Name, las = 2, cex.names = .7, col = color, ylab = 'MSE', xlab = 'Model' )
+```
+
+You can see from the graph above that decision tree has the lowest MSE. This suggests that out of all of our models, the tree is the best model and explains the most variability. This model should be better than the model selected through forward selection, suggesting that the tree explains more than 62.82% of the variability in log(scaled_sci). The tree model only uses distance and urban/rural classification. Since this model only has seven nodes, it is relatively intuitive to follow and easy to find the predicted log(scaled_sci) for a new piece of data.
+
+
+
+
+We also need to investigate what causes variability in sci scores within one zip code.
+```{r}
+df_same_zip <- df_s %>% filter(distance == 0)
+df_same_zip_merged <- merge(df_same_zip, df_sdoh_pa_selected, by.x = 'user_loc', by.y = 'ZIPCODE')
+same_zip_data <- subset(df_same_zip_merged, select = -c(user_loc, fr_loc, distance, Count, county_fr, county_user, ur_fr, correlation))
+same_zip_data <- na.omit(same_zip_data)
+
+#Let's normalize the data
+df_normalized_same <- same_zip_data
+for (i in 3:39){
+  df_normalized_same[,i]<-((same_zip_data[,i] - min(same_zip_data[,i]))/((max(same_zip_data[,i])-min(same_zip_data[,i]))))
+}
+same_zip_data <- df_normalized_same
+cor(same_zip_data$scaled_sci, same_zip_data[3:39])
+```
+From the below plot, we can see that it might be of worth to take the log of sci. 
+
+```{r}
+plot(same_zip_data$scaled_sci, same_zip_data$ACS_PCT_HH_SMARTPHONE_ZC)
+same_zip_data$scaled_sci <- log(same_zip_data$scaled_sci)
+
+plot(same_zip_data$scaled_sci, same_zip_data$ACS_PCT_HH_SMARTPHONE_ZC)
+cor(same_zip_data$scaled_sci, same_zip_data[3:39])
+```
+Most of the correlations have increased, which should help us with our model. 
+
+```{r}
+set.seed(18)
+
+#Create a training and test set with an 80/20 split.
+test_index_same <- sample(1:nrow(same_zip_data), nrow(same_zip_data)/5)
+allnums<- (1:nrow(same_zip_data))
+train_index_same<- allnums[-test_index_same]
+train_same <- same_zip_data[train_index_same,]
+test_same <- same_zip_data[test_index_same,]
+```
+
+Now it is time to start building models.
+Let's start by running multiple linear regression with all of the predictors. 
+Since we are using MSE as a way to compare models, we will store all of the MSEs in one MSE list as we go.
+
+```{r, warning = FALSE}
+lm.fit_same <- lm(scaled_sci~., data = train_same)
+predict <- predict.lm(lm.fit_same, newdata= test_same)
+
+#Calculate MSE for this model and add to list
+MSE.Full.MultiLin_same <- mean((test_same$scaled_sci - predict)^2)
+MSE.Full.MultiLin_same
+
+#Create empty MSE vector and empty vector names for the MSE
+MSE_All_Same <- c(MSE.Full.MultiLin_same)
+MSE_Name_Same <- c('Full MLR')
+summary(lm.fit_same)
+```
+Our MSE for the multiple linear regression is 0.2786184
+
+Now we will try forward selection to find the best multiple linear regression model.
+```{r, warning = FALSE}
+#Fit Models
+regfit.fwd_same <- regsubsets (scaled_sci ~ ., data = train_same, nvmax = 37 , method = "forward")
+test.mat_same <- model.matrix(scaled_sci ~., data = test_same)
+regfit.fwd_same
+
+#Calculate MSE for each model size
+val.errors_same <- rep (NA , 37)
+for (i in 1:37) {
+  coefi <- coef ( regfit.fwd_same , id = i)
+  pred <- test.mat_same [, names ( coefi )] %*% coefi
+  val.errors_same [ i] <- mean (( test_same$scaled_sci - pred ) ^2)
+}
+val.errors_same
+
+#Find the model with the smallest MSE
+which.min(val.errors_same)
+MSE.Forward_same <- val.errors_same[which.min(val.errors_same)]
+MSE.Forward_same
+
+#Add MSE and Name to lists
+MSE_All_Same <- c(MSE_All_Same, MSE.Forward_same)
+MSE_Name_Same <- c(MSE_Name_Same, 'Fwd Select')
+```
+19 predictors minimize our MSE to  0.2681383
+
+Let's look more closely at this model
+```{r}
+fwd_same_vars<- which(summary(regfit.fwd_same, which.min(val.errors_same))$which[which.min(val.errors_same),])
+fwd_select_data_same <- subset(same_zip_data, select = fwd_same_vars)
+fwd_train_same <- fwd_select_data_same[train_index_same,]
+fwd_test_same <- fwd_select_data_same[test_index_same,]
+fwd.fit_same <- lm(scaled_sci~. , data = fwd_train_same)
+predict <- predict.lm(fwd.fit_same, newdata= fwd_test_same)
+summary(fwd.fit_same)
+```
+With this model we have a multiple r squared of .7957 and an adjusted R-squared of .7918, meaning we are able to explain about 79% of the variability in log(scaled_sci) with the 19 above predictors. Some of the variables that contribute to the model the most include: ur_user, ACS_TOT_POP_US_ABOVE1_ZC, ACS_PCT_HISPANIC_ZC and ACS_PCT_BACHELOR_DGR_ZC.
+
+Next we will run Ridge Regression on the same zip codes to see if we can decrease the MSE
+```{r}
+#Format data and grid to prep for Ridge Regression
+x <- model.matrix(scaled_sci~., same_zip_data)[,-1]
+y <- same_zip_data$scaled_sci
+y.test <-y[test_index_same]
+grid <- 10^seq(10, -2, length = 100)
+
+#Fit the Model
+ridge.mod_same <- glmnet(x[train_index_same,], y[train_index_same], alpha = 0, lamda = grid, thresh = 1e-12)
+
+set.seed(15)
+
+#Use Cross validation to find best value of lambda
+cv.out_same <- cv.glmnet(x[train_index_same,], y[train_index_same], alpha = 0)
+plot(cv.out_same)
+bestlam_same <- cv.out_same$lambda.min
+bestlam_same
+
+#Fit predictions with best value of lambda
+ridge.pred_same <- predict(ridge.mod_same, s = bestlam_same, newx = x[test_index_same, ])
+
+#Calculate MSE
+MSE.ridge_same <- mean((ridge.pred_same - y.test)^2)
+MSE.ridge_same
+
+#Add MSE and Name to lists
+MSE_All_Same <- c(MSE_All_Same, MSE.ridge_same)
+MSE_Name_Same <- c(MSE_Name_Same, 'Ridge')
+```
+
+Next we will run Lasso
+```{r}
+#Build the model
+lasso.mod_same <- glmnet(x[train_index_same, ], y[train_index_same], alpha =1, lamda = grid)
+set.seed(117)
+
+#Use cross validation to select best value of lamda
+cv.out_same <- cv.glmnet(x[train_index_same, ], y[train_index_same], alpha = 1)
+plot(cv.out_same)
+bestlam_same <- cv.out_same$lambda.min 
+
+#Fit predictions for test set using best value of lambda
+lasso.pred_same <- predict(lasso.mod_same, s = bestlam_same, newx = x[test_index_same, ])
+
+#Calculate MSE
+MSE.lasso_same <- mean((lasso.pred_same - y.test)^2)
+
+#Look at variables of interest
+out <-  glmnet( x, y, alpha = 1, lamda = grid)
+lasso.coef <- predict(out, type = 'coefficients', s = bestlam)[1:18,]
+lasso.coef
+MSE.lasso_same
+
+#Add MSE and Name to lists
+MSE_All_Same <- c(MSE_All_Same, MSE.lasso_same)
+MSE_Name_Same <- c(MSE_Name_Same, 'Lasso')
+```
+
+Next we will run Ridge Regression but only using the variables selected with forward selection.
+```{r}
+#Format data and grid to prep for Ridge Regression
+x <- model.matrix(scaled_sci~., fwd_select_data_same)[,-1]
+y <- fwd_select_data_same$scaled_sci
+y.test <-y[test_index_same]
+grid <- 10^seq(10, -2, length = 100)
+
+#Fit the Model
+ridge.mod_same <- glmnet(x[train_index_same,], y[train_index_same], alpha = 0, lamda = grid, thresh = 1e-12)
+
+set.seed(15)
+
+#Use Cross validation to find best value of lambda
+cv.out_same <- cv.glmnet(x[train_index_same,], y[train_index_same], alpha = 0)
+plot(cv.out_same)
+bestlam_same_fwd <- cv.out_same$lambda.min
+bestlam_same_fwd
+
+#Fit predictions with best value of lambda
+ridge.pred_same <- predict(ridge.mod_same, s = bestlam_same_fwd, newx = x[test_index_same, ])
+
+#Calculate MSE
+MSE.ridge_same_fwd <- mean((ridge.pred_same - y.test)^2)
+MSE.ridge_same_fwd
+
+#Add MSE and Name to lists
+MSE_All_Same <- c(MSE_All_Same, MSE.ridge_same_fwd)
+MSE_Name_Same <- c(MSE_Name_Same, 'Ridge FWD')
+```
+
+Next we will run Lasso
+```{r}
+#Build the model
+lasso.mod_same <- glmnet(x[train_index_same, ], y[train_index_same], alpha =1, lamda = grid)
+set.seed(117)
+
+#Use cross validation to select best value of lambda
+cv.out_same <- cv.glmnet(x[train_index_same, ], y[train_index_same], alpha = 1)
+plot(cv.out_same)
+bestlam_same <- cv.out_same$lambda.min 
+
+#Fit predictions for test set using best value of lambda
+lasso.pred_same <- predict(lasso.mod_same, s = bestlam_same, newx = x[test_index_same, ])
+
+#Calculate MSE
+MSE.lasso_same_fwd <- mean((lasso.pred_same - y.test)^2)
+
+#Look at variables of interest
+out <-  glmnet( x, y, alpha = 1, lamda = grid)
+lasso.coef <- predict(out, type = 'coefficients', s = bestlam)[1:18,]
+lasso.coef
+MSE.lasso_same_fwd
+
+#Add MSE and Name to lists
+MSE_All_Same <- c(MSE_All_Same, MSE.lasso_same_fwd)
+MSE_Name_Same <- c(MSE_Name_Same, 'Lasso Fwd')
+```
+
+Next we will create a tree
+```{r, warning = FALSE}
+set.seed(77)
+#Build and plot the tree
+tree_same <- tree( scaled_sci ~ ., same_zip_data, subset = train_index_same )
+plot(tree_same)
+summary(tree_same)
+text(tree_same, pretty = 0, cex = .5)
+
+#Make predictions and calculate MSE
+tree.pred_same <- predict(tree_same, test_same)
+MSE.tree_same <- mean((tree.pred_same - test_same$scaled_sci)^2)
+MSE.tree_same
+```
+
+```{r}
+#Add MSE and Name to lists
+MSE_All_Same <- c(MSE_All_Same, MSE.tree_same)
+MSE_Name_Same <- c(MSE_Name_Same, 'Full Tree')
+```
+
+Let's look at a graph of all the MSEs of all of the models we tried.
+```{r}
+plot(MSE_All_Same)
+color <- c(rep('Red', 3), 'Green', rep('Red', 4))
+barplot(MSE_All_Same, names.arg = MSE_Name_Same, las = 2, cex.names = .7, col = color, ylab = 'MSE within Zipcodes', xlab = 'Model' )
+which.min(MSE_All_Same)
+```
+
+You can see from the above graph that Lasso on all the variables has the lowest MSE and therefore explains the most variability. However, It is rather similar to the multiple linear regression model that was selected with forward selection.As such, for interpretability purposes, we might want to stick with using the forward selection model to explain variability. This model uses ur_user, ACS_TOT_POP_US_ABOVE1_ZC, ACS_PCT_MALE_ZC, ACS_PCT_FOREIGN_BORN_ZC, ACS_PCT_OTH_LANG_ZC, ACS_PCT_SPANISH_ZC, ACS_PCT_ASIAN_ZC, ACS_PCT_BLACK_ZC, ACS_PCT_HISPANIC_ZC, ACS_PCT_WHITE_ZC, ACS_PCT_HH_SMARTPHONE_ZC, ACS_PCT_HH_CELLULAR_ZC, ACS_PCT_HH_NO_INTERNET_ZC, ACS_PCT_EMPLOYED_ZC, ACS_PCT_HH_FOOD_STMP_BLW_POV_ZC, ACS_PCT_BACHELOR_DGR_ZC, ACS_PCT_DIF_STATE_ZC, ACS_PCT_DRIVE_2WORK_ZC, and ACS_PCT_HU_NO_VEH_ZC to explain approximately 79% of the variability in log(scaled_sci).
